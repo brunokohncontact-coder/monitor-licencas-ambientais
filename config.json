@@ -1,0 +1,60 @@
+{
+  "empresas": [
+    {
+      "nome": "CETESB - Companhia Ambiental do Estado de São Paulo",
+      "cnpj": "43.776.491/0001-70",
+      "ativa": true
+    },
+    {
+      "nome": "Ambiental Consultoria & Serviços Ltda",
+      "cnpj": "16.458.199/0001-36",
+      "ativa": true
+    }
+  ],
+
+  "filtro": {
+    "tiposRelevantes": [
+      "Licença",
+      "Portaria",
+      "Resolução",
+      "Despacho",
+      "Autuação",
+      "Auto de Infração",
+      "Edital",
+      "Aviso"
+    ],
+    "palavrasChaveTitulo": [
+      "licença",
+      "licenca",
+      "renovação",
+      "renovacao",
+      "autuação",
+      "autuacao",
+      "infração",
+      "infracao",
+      "ambiental",
+      "ibama",
+      "icmbio",
+      "embargo"
+    ]
+  },
+
+  "agendamento": {
+    "cron": "0 8 * * 1-5",
+    "descricao": "Todo dia util (seg-sex) as 8h da manha"
+  },
+
+  "alerta": {
+    "ativo": true,
+    "_comentario_chave": "A chave da API Resend mora em config.local.json (fora do git). Veja README/config.local.example.json.",
+    "resendApiKey": "",
+    "de": "onboarding@resend.dev",
+    "para": ["brunokohn.contact@gmail.com"]
+  },
+
+  "ibama": {
+    "ativo": true,
+    "fontes": ["autos", "embargos"],
+    "diasMaximos": 30
+  }
+}

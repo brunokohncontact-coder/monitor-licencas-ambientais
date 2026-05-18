@@ -1,0 +1,34 @@
+# Dependencias
+node_modules/
+
+# Segredos (chaves de API, etc) — sempre ficar fora do git
+config.local.json
+.env
+.env.local
+
+# Permissoes locais do Claude Code (especificas da sua maquina)
+.claude/settings.local.json
+
+# Estado runtime (banco SQLite + WAL)
+dedup.db
+dedup.db-wal
+dedup.db-shm
+teste-dedup.db
+teste-dedup.db-wal
+teste-dedup.db-shm
+
+# Cache de CSVs do IBAMA (~160 MB, regenerado pelo proprio codigo)
+ibama-cache/
+
+# Logs do dia-a-dia
+logs/
+
+# Saidas das execucoes diarias
+relatorio-*.json
+
+# Artefatos antigos de debug do scraper DOU
+dou-debug.png
+dou-raw.html
+dou-rendered.html
+dou-network.json
+dou-resultados.json
