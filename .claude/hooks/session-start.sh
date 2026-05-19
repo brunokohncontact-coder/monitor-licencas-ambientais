@@ -11,6 +11,13 @@ fi
 # bloqueando todos os commits. Desabilita globalmente para esta sessao.
 git config --global commit.gpgsign false
 
+# Configura autenticacao GitHub via token, se disponivel no ambiente.
+# Para ativar: adicione GITHUB_TOKEN como secret nas configuracoes do ambiente
+# em code.claude.com (Settings > Environment > Secrets).
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  git config --global url."https://x-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+fi
+
 # Instala dependencias Node.js para que imports e linting funcionem.
 # O binario do Chromium (Playwright) nao e baixado aqui porque cdn.playwright.dev
 # esta bloqueado pela politica de rede cloud_default — e desnecessario para
