@@ -2,7 +2,7 @@
 
 Visão evolutiva do produto. Cada fase tem um objetivo claro de validação antes de seguir.
 
-> **Status atual:** Fase 2 concluída. Em validação antes de avançar para a Fase 3.
+> **Status atual:** Fase 2 concluída. Em validação antes de avançar para a Fase 3. (verificado em 2026-05-18)
 
 ---
 
