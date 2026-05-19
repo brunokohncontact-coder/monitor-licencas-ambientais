@@ -52,9 +52,9 @@ Visão evolutiva do produto. Cada fase tem um objetivo claro de validação ante
 
 Candidatos (priorizar conforme o que aparecer durante a Fase 2):
 
-- [~] **Alerta de falha**: e-mail/telegram quando o monitor cai ou pula execução
+- [x] **Alerta de falha**: e-mail/telegram quando o monitor cai ou pula execução
   - [x] E-mail quando `executarMonitor()` lanca excecao (catch no cron.js → `enviarAlertaFalha`)
-  - [ ] Deteccao de execucao pulada (heartbeat): registrar timestamp da ultima execucao e checar na inicializacao, ou integrar com servico externo como healthchecks.io
+  - [x] Deteccao de execucao pulada (heartbeat): tabela `execucoes` no dedup.db registra cada dia processado; cron.js faz catch-up automatico de dias uteis pulados na inicializacao (limite de 14 dias) e envia resumo por e-mail
 - [ ] **Heartbeat**: registrar cada execução bem-sucedida (mesmo sem alerta) num log estruturado ou serviço tipo healthchecks.io
 - [ ] **Retry inteligente** no DOU quando o portal devolve contagem zero suspeita (a variabilidade conhecida do DOU pode mascarar falhas reais)
 - [ ] **Resumo semanal** consolidando o que rolou nos 7 dias (mesmo quando não houve alerta)
@@ -129,3 +129,21 @@ git commit -m "feat: alerta por e-mail quando monitor cai com excecao"
 git push origin main
 ```
 Os arquivos ja estao staged (git add foi executado).
+
+### 2026-05-18 — Heartbeat / catch-up de dias uteis pulados
+
+**Tarefa:** detectar e recuperar execucoes que nao rodaram (PC desligado, cron nao aberto). Decidiu-se nao usar servico externo (healthchecks.io) para preservar a premissa de "zero configuracao manual" — tudo dentro do proprio codigo.
+
+**O que foi feito:**
+- `dedup.js`: nova tabela `execucoes (data PK, processado_em, total_alertas)`. Criada via `CREATE TABLE IF NOT EXISTS` no `criarSchemaAtual` — sem migracao destrutiva. Adicionadas funcoes `registrarExecucao(db, data, total)` (idempotente via `ON CONFLICT`) e `listarExecucoes(db)`.
+- `monitor.js`: ao final de `executarMonitorInterno`, calcula total de alertas (DOU + IBAMA) e chama `registrarExecucao(db, hoje, total)`. Marca mesmo quando nao houve alerta — o que importa e que o dia foi processado.
+- `cron.js`: nova funcao `verificarCatchUp()` rodada antes do `cron.schedule`. Le execucoes registradas, calcula dias uteis (seg-sex) faltando entre a primeira execucao registrada e hoje, e roda `executarMonitor({data})` em sequencia para cada um. Limite de 14 dias para evitar rajada se a maquina ficou parada por meses. Estrutura reorganizada para `main()` async.
+- `alerta.js`: nova funcao `enviarResumoCatchUp(resumos, ctx, opcoes)` envia um e-mail consolidado listando os dias recuperados (com totais de alertas e erros se houver). E-mails de alerta por dia continuam saindo individualmente via o fluxo normal do `executarMonitor`.
+
+**Comportamento:**
+- Primeira execucao da vida do agendador: nao faz catch-up (tabela vazia → comeca do zero).
+- Nada pulado: log `Catch-up: sem dias uteis pendentes.` e segue.
+- Algo pulado: roda cada dia em sequencia (IBAMA cache compartilhado proibe paralelismo), envia 1 e-mail de resumo + N e-mails de alerta normais.
+- Muitos dias pulados (>14): recupera apenas os 14 mais recentes e marca `truncado=true` no resumo.
+
+**Testes:** logica de "dias faltando" validada em 5 casos (sex→seg, gap de uma semana, mesmo dia, gap longo com truncamento, dias futuros ja registrados). Schema do dedup testado com banco temporario. Sintaxe de todos os arquivos verificada com `node -c`.

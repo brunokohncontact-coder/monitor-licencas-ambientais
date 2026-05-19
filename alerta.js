@@ -217,4 +217,92 @@ async function enviarAlertaFalha(erro, opcoes = {}) {
   }
 }
 
-module.exports = { enviarAlerta, enviarAlertaFalha };
+// Envia um resumo apos catch-up de dias uteis pulados.
+// Recebe uma lista de {data, total, dou, ibama, erro} — um por dia recuperado.
+// Disparado pelo cron.js na inicializacao quando detecta dias pulados.
+// Os e-mails de alerta por dia ja foram disparados individualmente pelo
+// executarMonitor de cada dia — este resumo so consolida o que rolou.
+async function enviarResumoCatchUp(resumos, ctx, opcoes) {
+  const { apiKey, de, para } = opcoes;
+
+  if (!apiKey || !de || !para || para.length === 0) {
+    console.log('Resumo de catch-up: e-mail nao configurado. Pulando envio.');
+    return false;
+  }
+
+  if (!resumos || resumos.length === 0) return false;
+
+  const totalAlertas = resumos.reduce((acc, r) => acc + (r.total || 0), 0);
+  const totalErros = resumos.filter((r) => r.erro).length;
+  const totalDias = resumos.length;
+
+  const linhas = resumos
+    .map((r) => {
+      const status = r.erro
+        ? `<span style="color:#c0392b;">FALHOU: ${String(r.erro).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>`
+        : `${r.total} alerta(s) (DOU: ${r.dou}, IBAMA: ${r.ibama})`;
+      return `<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;">${r.data}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;">${status}</td></tr>`;
+    })
+    .join('');
+
+  const aviso = ctx && ctx.truncado
+    ? `<div style="background:#fef9e7;border:1px solid #f39c12;padding:12px;border-radius:6px;margin-bottom:16px;color:#7f6000;">
+        <strong>Aviso:</strong> havia mais dias uteis pendentes do que o limite. Apenas os mais recentes foram recuperados — execute manualmente <code>node monitor.js dd-MM-yyyy</code> para os mais antigos se necessario.
+       </div>`
+    : '';
+
+  const agora = new Date().toISOString();
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;color:#333;">
+      <div style="background:#34495e;color:white;padding:20px;border-radius:8px 8px 0 0;">
+        <h2 style="margin:0;">Monitor de Licencas Ambientais &mdash; Recuperacao</h2>
+        <div style="font-size:14px;opacity:0.8;margin-top:4px;">Catch-up de ${totalDias} dia(s) util(eis)</div>
+      </div>
+
+      <div style="background:white;border:1px solid #ddd;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+        ${aviso}
+        <p style="margin-top:0;">O agendador identificou dias uteis que nao foram monitorados (PC desligado, cron nao aberto, etc) e executou a recuperacao agora.</p>
+        <p><strong>${totalAlertas}</strong> alerta(s) novo(s) no periodo recuperado. ${totalErros > 0 ? `<strong style="color:#c0392b;">${totalErros} dia(s) com erro.</strong>` : ''}</p>
+        <p style="font-size:13px;color:#666;">Cada dia com alertas tambem disparou seu proprio e-mail detalhado.</p>
+
+        <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
+          <thead><tr style="background:#f5f5f5;">
+            <th style="padding:8px 12px;text-align:left;">Data</th>
+            <th style="padding:8px 12px;text-align:left;">Resultado</th>
+          </tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+
+        <div style="font-size:11px;color:#aaa;margin-top:24px;padding-top:16px;border-top:1px solid #eee;">
+          Gerado em ${agora} &mdash; Monitor de Licencas Ambientais
+        </div>
+      </div>
+    </body>
+    </html>`;
+
+  const resend = new Resend(apiKey);
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: de,
+      to: para,
+      subject: `[Monitor Ambiental] Catch-up: ${totalDias} dia(s) recuperado(s) — ${totalAlertas} alerta(s)`,
+      html,
+    });
+
+    if (error) {
+      console.error('Erro ao enviar resumo de catch-up:', error.message);
+      return false;
+    }
+
+    console.log(`Resumo de catch-up enviado! ID: ${data.id}`);
+    return true;
+  } catch (err) {
+    console.error('Excecao ao enviar resumo de catch-up:', err.message);
+    return false;
+  }
+}
+
+module.exports = { enviarAlerta, enviarAlertaFalha, enviarResumoCatchUp };

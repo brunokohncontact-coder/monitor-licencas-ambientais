@@ -28,6 +28,12 @@ function criarSchemaAtual(db) {
     CREATE INDEX IF NOT EXISTS idx_cnpj ON alertas_enviados(cnpj);
     CREATE INDEX IF NOT EXISTS idx_alertado_em ON alertas_enviados(alertado_em);
     CREATE INDEX IF NOT EXISTS idx_fonte ON alertas_enviados(fonte);
+
+    CREATE TABLE IF NOT EXISTS execucoes (
+      data TEXT PRIMARY KEY,
+      processado_em TEXT NOT NULL,
+      total_alertas INTEGER NOT NULL DEFAULT 0
+    );
   `);
 }
 
@@ -181,11 +187,32 @@ function contar(db, fonte = null, cnpj = null) {
   return db.prepare('SELECT COUNT(*) AS n FROM alertas_enviados').get().n;
 }
 
+// Registra que uma execucao do monitor rodou ate o fim para uma data dd-MM-yyyy.
+// Sobrescreve se ja existir: re-execucoes para a mesma data atualizam o timestamp
+// e a contagem de alertas (a dedup de publicacoes ja evita reenvio de e-mails).
+// Usado pelo catch-up do cron.js para saber quais dias uteis foram pulados.
+function registrarExecucao(db, data, totalAlertas = 0) {
+  const agora = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO execucoes (data, processado_em, total_alertas)
+    VALUES (?, ?, ?)
+    ON CONFLICT(data) DO UPDATE SET
+      processado_em = excluded.processado_em,
+      total_alertas = excluded.total_alertas
+  `).run(data, agora, totalAlertas);
+}
+
+function listarExecucoes(db) {
+  return db.prepare('SELECT data, processado_em, total_alertas FROM execucoes').all();
+}
+
 module.exports = {
   inicializarDB,
   filtrarNaoAlertadas,
   marcarComoAlertadas,
   marcarIdsComoAlertadas,
   contar,
+  registrarExecucao,
+  listarExecucoes,
   DB_PATH,
 };
