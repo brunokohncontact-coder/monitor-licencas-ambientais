@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { buscarDOU, dataDeHoje } = require('./dou');
 const { enviarAlerta } = require('./alerta');
-const { inicializarDB, filtrarNaoAlertadas, marcarComoAlertadas } = require('./dedup');
+const { inicializarDB, filtrarNaoAlertadas, marcarComoAlertadas, registrarExecucao } = require('./dedup');
 const { buscarFonte: buscarFonteIBAMA, normalizarCNPJ } = require('./ibama');
 const logger = require('./log');
 
@@ -279,6 +279,17 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
       }
     }
   }
+
+  // Registra que o monitor rodou ate o fim para esta data.
+  // Serve de base para o catch-up do cron.js detectar dias uteis pulados
+  // (PC desligado, cron nao aberto) na proxima vez que o agendador subir.
+  // Marca mesmo quando totalAlertas e zero: o que importa e que o dia foi processado.
+  const totalDOU = relatorio.resultados.reduce((acc, r) => acc + r.relevantes.length, 0);
+  const totalIBAMA = Object.values(relatorio.ibama || {}).reduce(
+    (acc, f) => acc + (f.novas?.length || 0),
+    0
+  );
+  registrarExecucao(db, hoje, totalDOU + totalIBAMA);
 
   db.close();
   return relatorio;
