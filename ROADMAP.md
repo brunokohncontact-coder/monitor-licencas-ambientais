@@ -52,7 +52,9 @@ Visão evolutiva do produto. Cada fase tem um objetivo claro de validação ante
 
 Candidatos (priorizar conforme o que aparecer durante a Fase 2):
 
-- [ ] **Alerta de falha**: e-mail/telegram quando o monitor cai ou pula execução
+- [~] **Alerta de falha**: e-mail/telegram quando o monitor cai ou pula execução
+  - [x] E-mail quando `executarMonitor()` lanca excecao (catch no cron.js → `enviarAlertaFalha`)
+  - [ ] Deteccao de execucao pulada (heartbeat): registrar timestamp da ultima execucao e checar na inicializacao, ou integrar com servico externo como healthchecks.io
 - [ ] **Heartbeat**: registrar cada execução bem-sucedida (mesmo sem alerta) num log estruturado ou serviço tipo healthchecks.io
 - [ ] **Retry inteligente** no DOU quando o portal devolve contagem zero suspeita (a variabilidade conhecida do DOU pode mascarar falhas reais)
 - [ ] **Resumo semanal** consolidando o que rolou nos 7 dias (mesmo quando não houve alerta)
@@ -102,3 +104,28 @@ Discutir com Bruno antes de começar. Decisões em aberto:
 ---
 
 _Atualizar este arquivo sempre que uma fase mudar de status ou um item novo entrar/sair. Quem mexer, ajusta a data implícita pelo commit._
+
+---
+
+## Notas de execução
+
+### 2026-05-19 — Alerta de falha (sub-item 1: e-mail quando monitor cai)
+
+**Tarefa:** implementar envio de e-mail quando `executarMonitor()` lanca excecao no cron.
+
+**O que foi feito:**
+- `alerta.js`: adicionada funcao `enviarAlertaFalha(erro, opcoes)` — monta HTML de falha e envia via Resend. Exportada junto com `enviarAlerta`.
+- `monitor.js`: adicionado `config` ao `module.exports` para que outros modulos usem a versao mesclada com `config.local.json` sem duplicar a logica de merge.
+- `cron.js`: importa `enviarAlertaFalha` e `config` do monitor. No bloco `catch` do cron, chama `enviarAlertaFalha` se `cfgAlerta.ativo` for verdadeiro.
+- `ROADMAP.md`: item desmembrado em sub-itens; primeiro marcado como `[x]`.
+
+**Bloqueio — commit nao realizado:**
+O servidor de assinatura de commits (`/tmp/code-sign`) retornou status 400 `missing source` em todas as tentativas. O erro ocorre mesmo em chamadas diretas ao binario, independente da mensagem de commit. Nao e possivel corrigir isso de dentro da sessao.
+
+**Para finalizar manualmente (quando o signing estiver funcionando):**
+```
+git add alerta.js cron.js monitor.js ROADMAP.md
+git commit -m "feat: alerta por e-mail quando monitor cai com excecao"
+git push origin main
+```
+Os arquivos ja estao staged (git add foi executado).

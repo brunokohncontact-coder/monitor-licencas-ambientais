@@ -291,4 +291,6 @@ if (require.main === module) {
   executarMonitor(dataArg ? { data: dataArg } : {}).catch(console.error);
 }
 
-module.exports = { executarMonitor };
+// config e exportado para que cron.js use a versao mesclada (incluindo config.local.json)
+// sem precisar duplicar a logica de merge.
+module.exports = { executarMonitor, config };

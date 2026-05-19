@@ -148,4 +148,73 @@ async function enviarAlerta(relatorio, opcoes = {}) {
   }
 }
 
-module.exports = { enviarAlerta };
+// Envia e-mail de falha quando o monitor lanca excecao durante execucao automatica.
+// Usa as mesmas configuracoes de alerta (apiKey, de, para).
+// Projetado para ser chamado no catch do cron — nunca deve lancar excecao.
+async function enviarAlertaFalha(erro, opcoes = {}) {
+  const { apiKey, de, para } = opcoes;
+
+  if (!apiKey || !de || !para || para.length === 0) {
+    console.log('Alerta de falha: e-mail nao configurado. Pulando envio.');
+    return false;
+  }
+
+  const resend = new Resend(apiKey);
+  const agora = new Date().toISOString();
+  const mensagem = erro?.message || String(erro);
+  // Escapa HTML basico para evitar que a stack quebre o layout do e-mail
+  const stackRaw = erro?.stack || '(sem stack trace)';
+  const stack = stackRaw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;color:#333;">
+      <div style="background:#c0392b;color:white;padding:20px;border-radius:8px 8px 0 0;">
+        <h2 style="margin:0;">Monitor de Licencas Ambientais &mdash; FALHA</h2>
+        <div style="font-size:14px;opacity:0.8;margin-top:4px;">${agora}</div>
+      </div>
+
+      <div style="background:white;border:1px solid #ddd;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+        <div style="background:#fef2f2;border:1px solid #c0392b;padding:12px;border-radius:6px;margin-bottom:24px;">
+          <strong style="color:#c0392b;">&#9888; O monitor encerrou com erro durante a execucao automatica.</strong>
+          Verifique o log da execucao para mais detalhes.
+        </div>
+
+        <h3 style="color:#333;margin-top:0;">Erro</h3>
+        <div style="background:#f8f9fa;padding:12px;border-radius:4px;font-family:monospace;font-size:13px;color:#c0392b;word-break:break-all;">
+          ${mensagem}
+        </div>
+
+        <h3 style="color:#333;margin-top:16px;">Stack trace</h3>
+        <pre style="background:#f8f9fa;padding:12px;border-radius:4px;font-size:12px;color:#555;overflow:auto;white-space:pre-wrap;margin:0;">${stack}</pre>
+
+        <div style="font-size:11px;color:#aaa;margin-top:24px;padding-top:16px;border-top:1px solid #eee;">
+          Gerado em ${agora} &mdash; Monitor de Licencas Ambientais
+        </div>
+      </div>
+    </body>
+    </html>`;
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: de,
+      to: para,
+      subject: `[Monitor Ambiental] FALHA na execucao — ${agora}`,
+      html,
+    });
+
+    if (error) {
+      console.error('Erro ao enviar alerta de falha:', error.message);
+      return false;
+    }
+
+    console.log(`Alerta de falha enviado! ID: ${data.id}`);
+    return true;
+  } catch (err) {
+    console.error('Excecao ao enviar alerta de falha:', err.message);
+    return false;
+  }
+}
+
+module.exports = { enviarAlerta, enviarAlertaFalha };
