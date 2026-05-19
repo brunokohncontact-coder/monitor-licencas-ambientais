@@ -11,11 +11,14 @@ fi
 # bloqueando todos os commits. Desabilita globalmente para esta sessao.
 git config --global commit.gpgsign false
 
-# Configura autenticacao GitHub via token, se disponivel no ambiente.
-# Para ativar: adicione GITHUB_TOKEN como secret nas configuracoes do ambiente
-# em code.claude.com (Settings > Environment > Secrets).
-if [ -n "${GITHUB_TOKEN:-}" ]; then
-  git config --global url."https://x-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+# Configura autenticacao GitHub via token para operacoes git CLI (push/pull).
+# GH_TOKEN e o nome padrao usado pelo Claude Code on the web (documentacao oficial).
+# Para ativar: abra o ambiente em code.claude.com > icone de nuvem > engrenagem
+# do ambiente > campo "Environment variables" > adicione: GH_TOKEN=ghp_seutoken
+# O token precisa de permissao "Contents: Read and write" no repositorio.
+TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+if [ -n "$TOKEN" ]; then
+  git config --global url."https://x-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
 fi
 
 # Instala dependencias Node.js para que imports e linting funcionem.
