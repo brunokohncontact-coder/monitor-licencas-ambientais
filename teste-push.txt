@@ -1,0 +1,2 @@
+Arquivo de teste para verificar push e deploy no GitHub.
+Data: 2026-05-19
