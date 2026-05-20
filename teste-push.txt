@@ -1,0 +1,3 @@
+Teste de push e deploy — 2026-05-19
+
+Este arquivo foi criado para verificar que o fluxo de push para o GitHub está funcionando corretamente.
