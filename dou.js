@@ -95,7 +95,7 @@ function buildProximaPaginaUrl(termo, result, nextPage) {
 // a retentativa. Um resultado com zero publicacoes NAO e erro: significa que
 // o portal simplesmente nao tinha nada para aquele termo/data.
 async function carregarComExtracao(page, url) {
-  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
   const resultado = await extrairPagina(page);
   if (!resultado) {
     throw new Error('DOU nao respondeu a tempo (extracao da pagina falhou)');

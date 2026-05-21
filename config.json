@@ -1,6 +1,5 @@
 {
   "_comentario": "Cada cliente tem sua propria lista de empresas e seus destinatarios de e-mail. As secoes filtro, agendamento, alerta e ibama sao globais. A chave da API Resend mora em config.local.json (fora do git).",
-
   "clientes": [
     {
       "id": "default",
@@ -18,14 +17,20 @@
           "cnpj": "16.458.199/0001-36",
           "ativa": true,
           "uf": "SP"
+        },
+        {
+          "nome": "teste",
+          "cnpj": "15.925.368/0001-38",
+          "ativa": true
         }
       ],
       "alerta": {
-        "para": ["brunokohn.contact@gmail.com"]
+        "para": [
+          "brunokohn.contact@gmail.com"
+        ]
       }
     }
   ],
-
   "filtro": {
     "tiposRelevantes": [
       "Licença",
@@ -52,29 +57,29 @@
       "embargo"
     ]
   },
-
   "agendamento": {
     "cron": "0 8 * * 1-5",
     "descricao": "Todo dia util (seg-sex) as 8h da manha"
   },
-
   "alerta": {
     "ativo": true,
     "de": "onboarding@resend.dev"
   },
-
   "ibama": {
     "ativo": true,
-    "fontes": ["autos", "embargos"],
+    "fontes": [
+      "autos",
+      "embargos"
+    ],
     "diasMaximos": 30
   },
-
   "diariosEstaduais": {
     "ativo": true,
-    "estados": ["SP"],
+    "estados": [
+      "SP"
+    ],
     "diasMaximos": 7
   },
-
   "painel": {
     "porta": 3000
   }

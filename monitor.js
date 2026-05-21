@@ -378,144 +378,151 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
   const browser = await chromium.launch({ headless: true });
   const db = inicializarDB();
 
-  const relatorio = {
-    data: hoje,
-    executadoEm: new Date().toISOString(),
-    clientes: [],
-  };
+  try {
+    const relatorio = {
+      data: hoje,
+      executadoEm: new Date().toISOString(),
+      clientes: [],
+    };
 
-  // clienteId -> { dou, ibama } com os mapas classPK -> { cnpj, empresa }.
-  // Usado depois do envio para enriquecer as marcacoes no banco.
-  const contextoPorCliente = {};
+    // clienteId -> { dou, ibama } com os mapas classPK -> { cnpj, empresa }.
+    // Usado depois do envio para enriquecer as marcacoes no banco.
+    const contextoPorCliente = {};
 
-  for (const cliente of clientesAtivos) {
-    const empresasAtivas = (cliente.empresas || []).filter((e) => e.ativa);
-    console.log(
-      `\n=== Cliente: ${cliente.nome} (${empresasAtivas.length} empresa(s) ativa(s)) ===`
-    );
+    for (const cliente of clientesAtivos) {
+      const empresasAtivas = (cliente.empresas || []).filter((e) => e.ativa);
+      console.log(
+        `\n=== Cliente: ${cliente.nome} (${empresasAtivas.length} empresa(s) ativa(s)) ===`
+      );
 
-    // Uma falha ao processar um cliente nao pode derrubar os demais: o erro
-    // e registrado no bloco do cliente e o laco segue para o proximo.
+      // Uma falha ao processar um cliente nao pode derrubar os demais: o erro
+      // e registrado no bloco do cliente e o laco segue para o proximo.
+      try {
+        const contextoDOU = {};
+        const contextoIBAMA = {};
+        const contextoDiarios = {};
+
+        const resultados = await processarDOUDoCliente(
+          browser,
+          empresasAtivas,
+          hoje,
+          db,
+          cliente.id,
+          contextoDOU,
+          config
+        );
+        const ibama = await processarIBAMADoCliente(empresasAtivas, db, cliente.id, contextoIBAMA, config);
+        const diariosEstaduais = await processarDiariosDoCliente(
+          browser,
+          empresasAtivas,
+          db,
+          cliente.id,
+          contextoDiarios,
+          config
+        );
+
+        relatorio.clientes.push({
+          clienteId: cliente.id,
+          clienteNome: cliente.nome,
+          resultados,
+          ibama,
+          diariosEstaduais,
+        });
+        contextoPorCliente[cliente.id] = {
+          dou: contextoDOU,
+          ibama: contextoIBAMA,
+          diarios: contextoDiarios,
+        };
+      } catch (err) {
+        console.error(`Erro ao processar o cliente "${cliente.nome}": ${err.message}`);
+        relatorio.clientes.push({
+          clienteId: cliente.id,
+          clienteNome: cliente.nome,
+          resultados: [],
+          ibama: {},
+          diariosEstaduais: {},
+          erro: err.message,
+        });
+      }
+    }
+
+    imprimirRelatorio(relatorio);
+
+    // Salvar relatorio em arquivo JSON (nome em data ISO, ordenavel).
+    const nomeArquivo = `relatorio-${hoje.split('-').reverse().join('-')}.json`;
     try {
-      const contextoDOU = {};
-      const contextoIBAMA = {};
-      const contextoDiarios = {};
-
-      const resultados = await processarDOUDoCliente(
-        browser,
-        empresasAtivas,
-        hoje,
-        db,
-        cliente.id,
-        contextoDOU,
-        config
-      );
-      const ibama = await processarIBAMADoCliente(empresasAtivas, db, cliente.id, contextoIBAMA, config);
-      const diariosEstaduais = await processarDiariosDoCliente(
-        browser,
-        empresasAtivas,
-        db,
-        cliente.id,
-        contextoDiarios,
-        config
-      );
-
-      relatorio.clientes.push({
-        clienteId: cliente.id,
-        clienteNome: cliente.nome,
-        resultados,
-        ibama,
-        diariosEstaduais,
-      });
-      contextoPorCliente[cliente.id] = {
-        dou: contextoDOU,
-        ibama: contextoIBAMA,
-        diarios: contextoDiarios,
-      };
+      fs.writeFileSync(nomeArquivo, JSON.stringify(relatorio, null, 2));
+      console.log(`\nRelatorio salvo em: ${nomeArquivo}`);
     } catch (err) {
-      console.error(`Erro ao processar o cliente "${cliente.nome}": ${err.message}`);
-      relatorio.clientes.push({
-        clienteId: cliente.id,
-        clienteNome: cliente.nome,
-        resultados: [],
-        ibama: {},
-        diariosEstaduais: {},
-        erro: err.message,
-      });
+      console.error(`Erro ao salvar relatorio: ${err.message}`);
+      throw err;
     }
-  }
 
-  await browser.close();
+    // Enviar um e-mail por cliente. So marcamos como alertadas APOS o envio
+    // bem-sucedido — se falhar, a proxima execucao reenvia.
+    const cfgAlerta = config.alerta || {};
+    if (cfgAlerta.ativo) {
+      for (const bloco of relatorio.clientes) {
+        const cliente = clientesAtivos.find((c) => c.id === bloco.clienteId);
+        const para =
+          cliente && cliente.alerta && Array.isArray(cliente.alerta.para)
+            ? cliente.alerta.para
+            : [];
 
-  imprimirRelatorio(relatorio);
-
-  // Salvar relatorio em arquivo JSON (nome em data ISO, ordenavel).
-  const nomeArquivo = `relatorio-${hoje.split('-').reverse().join('-')}.json`;
-  fs.writeFileSync(nomeArquivo, JSON.stringify(relatorio, null, 2));
-  console.log(`\nRelatorio salvo em: ${nomeArquivo}`);
-
-  // Enviar um e-mail por cliente. So marcamos como alertadas APOS o envio
-  // bem-sucedido — se falhar, a proxima execucao reenvia.
-  const cfgAlerta = config.alerta || {};
-  if (cfgAlerta.ativo) {
-    for (const bloco of relatorio.clientes) {
-      const cliente = clientesAtivos.find((c) => c.id === bloco.clienteId);
-      const para =
-        cliente && cliente.alerta && Array.isArray(cliente.alerta.para)
-          ? cliente.alerta.para
-          : [];
-
-      if (para.length === 0) {
-        console.log(`Cliente "${bloco.clienteNome}" sem destinatarios — e-mail pulado.`);
-        continue;
-      }
-
-      const enviado = await enviarAlerta(
-        {
-          data: relatorio.data,
-          executadoEm: relatorio.executadoEm,
-          clienteNome: bloco.clienteNome,
-          resultados: bloco.resultados,
-          ibama: bloco.ibama,
-          diariosEstaduais: bloco.diariosEstaduais,
-        },
-        { apiKey: cfgAlerta.resendApiKey, de: cfgAlerta.de, para }
-      );
-
-      if (enviado) {
-        const ctx = contextoPorCliente[bloco.clienteId] || { dou: {}, ibama: {}, diarios: {} };
-
-        const novasDOU = bloco.resultados.flatMap((r) => r.relevantes);
-        const marcadasDOU = marcarComoAlertadas(db, novasDOU, ctx.dou, 'DOU', bloco.clienteId);
-        console.log(`  [${bloco.clienteNome}] marcadas no banco (DOU): ${marcadasDOU}`);
-
-        for (const fonteKey of Object.keys(bloco.ibama || {})) {
-          const novasIBAMA = bloco.ibama[fonteKey].novas || [];
-          if (novasIBAMA.length === 0) continue;
-          const m = marcarComoAlertadas(db, novasIBAMA, ctx.ibama, 'IBAMA', bloco.clienteId);
-          console.log(`  [${bloco.clienteNome}] marcadas no banco (IBAMA ${fonteKey}): ${m}`);
+        if (para.length === 0) {
+          console.log(`Cliente "${bloco.clienteNome}" sem destinatarios — e-mail pulado.`);
+          continue;
         }
 
-        // Diarios estaduais: marca por fonte (ex: 'DOESP') apos o envio.
-        for (const uf of Object.keys(bloco.diariosEstaduais || {})) {
-          const dadosUF = bloco.diariosEstaduais[uf];
-          const novasDiario = dadosUF.novas || [];
-          if (novasDiario.length === 0) continue;
-          const m = marcarComoAlertadas(
-            db,
-            novasDiario,
-            ctx.diarios,
-            dadosUF.fonte,
-            bloco.clienteId
-          );
-          console.log(`  [${bloco.clienteNome}] marcadas no banco (diario ${uf}): ${m}`);
+        const enviado = await enviarAlerta(
+          {
+            data: relatorio.data,
+            executadoEm: relatorio.executadoEm,
+            clienteNome: bloco.clienteNome,
+            resultados: bloco.resultados,
+            ibama: bloco.ibama,
+            diariosEstaduais: bloco.diariosEstaduais,
+          },
+          { apiKey: cfgAlerta.resendApiKey, de: cfgAlerta.de, para }
+        );
+
+        if (enviado) {
+          const ctx = contextoPorCliente[bloco.clienteId] || { dou: {}, ibama: {}, diarios: {} };
+
+          const novasDOU = bloco.resultados.flatMap((r) => r.relevantes);
+          const marcadasDOU = marcarComoAlertadas(db, novasDOU, ctx.dou, 'DOU', bloco.clienteId);
+          console.log(`  [${bloco.clienteNome}] marcadas no banco (DOU): ${marcadasDOU}`);
+
+          for (const fonteKey of Object.keys(bloco.ibama || {})) {
+            const novasIBAMA = bloco.ibama[fonteKey].novas || [];
+            if (novasIBAMA.length === 0) continue;
+            const m = marcarComoAlertadas(db, novasIBAMA, ctx.ibama, 'IBAMA', bloco.clienteId);
+            console.log(`  [${bloco.clienteNome}] marcadas no banco (IBAMA ${fonteKey}): ${m}`);
+          }
+
+          // Diarios estaduais: marca por fonte (ex: 'DOESP') apos o envio.
+          for (const uf of Object.keys(bloco.diariosEstaduais || {})) {
+            const dadosUF = bloco.diariosEstaduais[uf];
+            const novasDiario = dadosUF.novas || [];
+            if (novasDiario.length === 0) continue;
+            const m = marcarComoAlertadas(
+              db,
+              novasDiario,
+              ctx.diarios,
+              dadosUF.fonte,
+              bloco.clienteId
+            );
+            console.log(`  [${bloco.clienteNome}] marcadas no banco (diario ${uf}): ${m}`);
+          }
         }
       }
     }
-  }
 
-  db.close();
-  return relatorio;
+    return relatorio;
+  } finally {
+    await browser.close();
+    db.close();
+  }
 }
 
 // Se chamado diretamente (node monitor.js), executa imediatamente.

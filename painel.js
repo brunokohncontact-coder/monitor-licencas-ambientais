@@ -279,18 +279,20 @@ function paginaDashboard() {
 // Construcao do app Express
 // ---------------------------------------------------------------------------
 
-// Cria e configura o app Express. Recebe a senha por parametro (comparada
-// server-side) — assim a senha nunca precisa ser lida no momento do require,
-// e o app fica testavel sem subir o servidor.
+// Cria e configura o app Express. Recebe a senha e opcoes por parametro.
+// A senha nunca precisa ser lida no momento do require, e o app fica
+// testavel sem subir o servidor. sessionSecret deve ser fornecido para
+// garantir persistencia entre restarts.
 function criarApp(opcoes = {}) {
   const senha = opcoes.senha;
+  const sessionSecret = opcoes.sessionSecret;
   const app = express();
 
   app.use(express.urlencoded({ extended: false }));
   app.use(express.json());
   app.use(
     session({
-      secret: crypto.randomBytes(32).toString('hex'),
+      secret: sessionSecret || crypto.randomBytes(32).toString('hex'),
       resave: false,
       saveUninitialized: false,
       cookie: { httpOnly: true, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 8 },
@@ -521,9 +523,11 @@ function criarApp(opcoes = {}) {
 // Subida do servidor
 // ---------------------------------------------------------------------------
 
-// Sobe o painel. Le porta e senha da config; se painel.senha nao estiver
-// definida em config.local.json, falha de forma clara em portugues — o painel
-// nao sobe sem senha (nunca assume senha vazia).
+// Sobe o painel. Le porta, senha e sessionSecret da config; se painel.senha
+// nao estiver definida em config.local.json, falha de forma clara em
+// portugues — o painel nao sobe sem senha (nunca assume senha vazia).
+// sessionSecret e lido de config.local.json; se nao existir, gera um novo
+// e persiste em config.local.json para que permaneca consistente entre restarts.
 function iniciar(opcoes = {}) {
   const config = opcoes.config || carregarConfig();
   const painel = config.painel || {};
@@ -536,8 +540,26 @@ function iniciar(opcoes = {}) {
     );
   }
 
+  let sessionSecret = painel.sessionSecret;
+  if (!sessionSecret || typeof sessionSecret !== 'string') {
+    sessionSecret = crypto.randomBytes(32).toString('hex');
+    const localPath = path.join(RAIZ, 'config.local.json');
+    let local = {};
+    if (fs.existsSync(localPath)) {
+      try {
+        local = JSON.parse(fs.readFileSync(localPath, 'utf-8'));
+      } catch {
+        // arquivo invalido — comeca do vazio
+      }
+    }
+    local.painel = local.painel || {};
+    local.painel.sessionSecret = sessionSecret;
+    fs.writeFileSync(localPath, JSON.stringify(local, null, 2) + '\n');
+    console.log('Session secret gerado e salvo em config.local.json');
+  }
+
   const porta = painel.porta || 3000;
-  const app = criarApp({ senha });
+  const app = criarApp({ senha, sessionSecret });
 
   return app.listen(porta, () => {
     console.log(`Painel no ar em http://localhost:${porta}`);
