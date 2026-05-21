@@ -67,5 +67,11 @@
     "ativo": true,
     "fontes": ["autos", "embargos"],
     "diasMaximos": 30
+  },
+
+  "diariosEstaduais": {
+    "ativo": true,
+    "estados": ["SP"],
+    "diasMaximos": 7
   }
 }

@@ -9,6 +9,7 @@ const { buscarDOU, dataDeHoje } = require('./dou');
 const { enviarAlerta } = require('./alerta');
 const { inicializarDB, filtrarNaoAlertadas, marcarComoAlertadas } = require('./dedup');
 const { buscarFonte: buscarFonteIBAMA, normalizarCNPJ } = require('./ibama');
+const { DIARIOS, ufsParaVarrer } = require('./diario-estadual');
 const { carregarConfig } = require('./config-loader');
 const logger = require('./log');
 
@@ -49,6 +50,8 @@ function imprimirRelatorio(relatorio) {
   let totalDOUJa = 0;
   let totalIBAMANovas = 0;
   let totalIBAMAJa = 0;
+  let totalDiariosNovas = 0;
+  let totalDiariosJa = 0;
 
   for (const cliente of relatorio.clientes) {
     console.log(`\n${'#'.repeat(60)}`);
@@ -116,11 +119,38 @@ function imprimirRelatorio(relatorio) {
         console.log(`  Resumo:  ${(pub.resumo || '').slice(0, 200)}...`);
       });
     }
+
+    for (const [uf, dados] of Object.entries(cliente.diariosEstaduais || {})) {
+      console.log(`\n--- Diario Estadual: ${dados.nome || uf} ---`);
+      if (dados.erro) {
+        console.log(`  Erro: ${dados.erro}`);
+        continue;
+      }
+      const novasN = (dados.novas || []).length;
+      const jaN = (dados.jaAlertadas || []).length;
+      totalDiariosNovas += novasN;
+      totalDiariosJa += jaN;
+      console.log(
+        `Total no periodo: ${dados.totalEncontradas} | Novas: ${novasN} | Ja alertadas: ${jaN}`
+      );
+
+      (dados.novas || []).forEach((pub, i) => {
+        console.log(`\n  [${i + 1}] ${pub.tipo} — ${pub.data}`);
+        console.log(`  Empresa: ${pub.empresaConfig || ''} (${pub.cnpj || ''})`);
+        console.log(`  Titulo:  ${pub.titulo}`);
+        console.log(`  Orgao:   ${pub.orgaoStr}`);
+        console.log(`  Link:    ${pub.link}`);
+        console.log(`  Resumo:  ${(pub.resumo || '').slice(0, 200)}...`);
+      });
+    }
   }
 
   console.log(`\n${linha}`);
   console.log(`DOU — novos: ${totalDOUNovas} | ja alertados: ${totalDOUJa}`);
   console.log(`IBAMA — novos: ${totalIBAMANovas} | ja alertados: ${totalIBAMAJa}`);
+  console.log(
+    `Diarios estaduais — novos: ${totalDiariosNovas} | ja alertados: ${totalDiariosJa}`
+  );
   console.log(linha);
 }
 
@@ -254,6 +284,76 @@ async function processarIBAMADoCliente(empresasAtivas, db, clienteId, contextoIB
   return ibamaPorFonte;
 }
 
+// Processa os diarios estaduais de um cliente. Resolve as UFs a varrer (uniao
+// do campo `uf` das empresas, com override pela config) e, para cada UF com
+// diario implementado no registry, busca o CNPJ de cada empresa. UF sem
+// implementacao e pulada com aviso, sem erro. Cada UF tem seu try/catch — um
+// erro numa UF nao derruba as demais nem o resto do pipeline (padrao IBAMA).
+async function processarDiariosDoCliente(browser, empresasAtivas, db, clienteId, contextoDiarios) {
+  const cfg = config.diariosEstaduais || {};
+  const diariosPorUF = {};
+
+  if (cfg.ativo !== true || empresasAtivas.length === 0) return diariosPorUF;
+
+  const ufs = ufsParaVarrer(empresasAtivas, cfg.estados);
+  if (ufs.length === 0) return diariosPorUF;
+
+  for (const uf of ufs) {
+    const diario = DIARIOS[uf];
+    if (!diario) {
+      console.warn(`  Diario estadual de ${uf} nao implementado — pulando (sem erro).`);
+      continue;
+    }
+
+    console.log(`\n  Consultando diario estadual: ${diario.nome} (${uf})...`);
+    try {
+      let todas = [];
+      for (const empresa of empresasAtivas) {
+        const r = await diario.buscar(browser, empresa.cnpj, {
+          diasMaximos: cfg.diasMaximos || 7,
+        });
+        // Associa cada publicacao a empresa do config que originou a busca.
+        for (const pub of r.publicacoes) {
+          pub.empresaConfig = empresa.nome;
+          pub.cnpj = empresa.cnpj;
+        }
+        todas = todas.concat(r.publicacoes);
+      }
+
+      const { novas, jaAlertadas } = filtrarNaoAlertadas(db, todas, diario.fonte, clienteId);
+
+      for (const pub of novas) {
+        if (pub.classPK) {
+          contextoDiarios[pub.classPK] = { cnpj: pub.cnpj, empresa: pub.empresaConfig };
+        }
+      }
+
+      console.log(
+        `  [${diario.fonte}] Total: ${todas.length} | Novas: ${novas.length} | Ja alertadas: ${jaAlertadas.length}`
+      );
+
+      diariosPorUF[uf] = {
+        fonte: diario.fonte,
+        nome: diario.nome,
+        novas,
+        jaAlertadas,
+        totalEncontradas: todas.length,
+      };
+    } catch (err) {
+      console.error(`  Erro ao consultar diario estadual de ${uf}: ${err.message}`);
+      diariosPorUF[uf] = {
+        fonte: diario.fonte,
+        nome: diario.nome,
+        novas: [],
+        jaAlertadas: [],
+        erro: err.message,
+      };
+    }
+  }
+
+  return diariosPorUF;
+}
+
 async function executarMonitorInterno(opcoes, arquivoLog) {
   const hoje = opcoes.data || dataDeHoje();
 
@@ -292,6 +392,7 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
     try {
       const contextoDOU = {};
       const contextoIBAMA = {};
+      const contextoDiarios = {};
 
       const resultados = await processarDOUDoCliente(
         browser,
@@ -302,14 +403,26 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
         contextoDOU
       );
       const ibama = await processarIBAMADoCliente(empresasAtivas, db, cliente.id, contextoIBAMA);
+      const diariosEstaduais = await processarDiariosDoCliente(
+        browser,
+        empresasAtivas,
+        db,
+        cliente.id,
+        contextoDiarios
+      );
 
       relatorio.clientes.push({
         clienteId: cliente.id,
         clienteNome: cliente.nome,
         resultados,
         ibama,
+        diariosEstaduais,
       });
-      contextoPorCliente[cliente.id] = { dou: contextoDOU, ibama: contextoIBAMA };
+      contextoPorCliente[cliente.id] = {
+        dou: contextoDOU,
+        ibama: contextoIBAMA,
+        diarios: contextoDiarios,
+      };
     } catch (err) {
       console.error(`Erro ao processar o cliente "${cliente.nome}": ${err.message}`);
       relatorio.clientes.push({
@@ -317,6 +430,7 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
         clienteNome: cliente.nome,
         resultados: [],
         ibama: {},
+        diariosEstaduais: {},
         erro: err.message,
       });
     }
@@ -354,12 +468,13 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
           clienteNome: bloco.clienteNome,
           resultados: bloco.resultados,
           ibama: bloco.ibama,
+          diariosEstaduais: bloco.diariosEstaduais,
         },
         { apiKey: cfgAlerta.resendApiKey, de: cfgAlerta.de, para }
       );
 
       if (enviado) {
-        const ctx = contextoPorCliente[bloco.clienteId] || { dou: {}, ibama: {} };
+        const ctx = contextoPorCliente[bloco.clienteId] || { dou: {}, ibama: {}, diarios: {} };
 
         const novasDOU = bloco.resultados.flatMap((r) => r.relevantes);
         const marcadasDOU = marcarComoAlertadas(db, novasDOU, ctx.dou, 'DOU', bloco.clienteId);
@@ -370,6 +485,21 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
           if (novasIBAMA.length === 0) continue;
           const m = marcarComoAlertadas(db, novasIBAMA, ctx.ibama, 'IBAMA', bloco.clienteId);
           console.log(`  [${bloco.clienteNome}] marcadas no banco (IBAMA ${fonteKey}): ${m}`);
+        }
+
+        // Diarios estaduais: marca por fonte (ex: 'DOESP') apos o envio.
+        for (const uf of Object.keys(bloco.diariosEstaduais || {})) {
+          const dadosUF = bloco.diariosEstaduais[uf];
+          const novasDiario = dadosUF.novas || [];
+          if (novasDiario.length === 0) continue;
+          const m = marcarComoAlertadas(
+            db,
+            novasDiario,
+            ctx.diarios,
+            dadosUF.fonte,
+            bloco.clienteId
+          );
+          console.log(`  [${bloco.clienteNome}] marcadas no banco (diario ${uf}): ${m}`);
         }
       }
     }

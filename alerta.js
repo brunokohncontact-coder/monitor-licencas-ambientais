@@ -5,14 +5,18 @@
 
 const { Resend } = require('resend');
 
-// Conta alertas novos somando DOU + IBAMA
+// Conta alertas novos somando DOU + IBAMA + diarios estaduais
 function contarAlertas(relatorio) {
   const dou = relatorio.resultados.reduce((acc, r) => acc + r.relevantes.length, 0);
   const ibama = Object.values(relatorio.ibama || {}).reduce(
     (acc, f) => acc + (f.novas?.length || 0),
     0
   );
-  return { dou, ibama, total: dou + ibama };
+  const diarios = Object.values(relatorio.diariosEstaduais || {}).reduce(
+    (acc, d) => acc + (d.novas?.length || 0),
+    0
+  );
+  return { dou, ibama, diarios, total: dou + ibama + diarios };
 }
 
 // Gera o corpo HTML do e-mail de alerta
@@ -69,12 +73,42 @@ function gerarHtml(relatorio) {
     })
     .join('');
 
+  // Secao de diarios estaduais — uma subsecao por UF (ex: SP/DOESP).
+  // So aparece se houver algo novo.
+  const blocosDiarios = Object.entries(relatorio.diariosEstaduais || {})
+    .filter(([, dados]) => (dados.novas || []).length > 0)
+    .map(([uf, dados]) => {
+      const itens = dados.novas
+        .map(
+          (pub) => `
+          <div style="margin:12px 0; padding:12px; background:#f4f7f6; border-left:3px solid #16a085; border-radius:4px;">
+            <div style="font-size:12px; color:#666; margin-bottom:4px;">${pub.tipo} &mdash; ${pub.data}</div>
+            <div style="font-weight:600; margin-bottom:4px;">${pub.titulo || '(sem titulo)'}</div>
+            <div style="font-size:12px; color:#555; margin-bottom:6px;">${pub.empresaConfig || ''}${pub.cnpj ? ` &mdash; CNPJ: ${pub.cnpj}` : ''}</div>
+            <div style="font-size:12px; color:#555; margin-bottom:6px;">${pub.orgaoStr || ''}</div>
+            <div style="font-size:13px; color:#333; margin-bottom:8px;">${(pub.resumo || '').slice(0, 300)}${(pub.resumo || '').length > 300 ? '...' : ''}</div>
+            <a href="${pub.link}" style="font-size:12px; color:#16a085;">Ver no diario &rarr;</a>
+          </div>`
+        )
+        .join('');
+      return `
+        <div style="margin-bottom:24px;">
+          <h3 style="margin:16px 0 8px; color:#16a085;">${dados.nome || 'Diario estadual'} (${uf})</h3>
+          ${itens}
+        </div>`;
+    })
+    .join('');
+
   const secaoDOU = t.dou > 0
     ? `<h2 style="margin:8px 0 16px; color:#2c3e50; font-size:18px;">DOU</h2>${linhasEmpresas}`
     : '';
 
   const secaoIBAMA = t.ibama > 0
     ? `<h2 style="margin:24px 0 16px; color:#2c3e50; font-size:18px; border-top:1px solid #eee; padding-top:16px;">IBAMA &mdash; Dados Abertos</h2>${blocosIBAMA}`
+    : '';
+
+  const secaoDiarios = t.diarios > 0
+    ? `<h2 style="margin:24px 0 16px; color:#2c3e50; font-size:18px; border-top:1px solid #eee; padding-top:16px;">Diarios Oficiais Estaduais</h2>${blocosDiarios}`
     : '';
 
   return `
@@ -89,11 +123,12 @@ function gerarHtml(relatorio) {
       <div style="background:white;border:1px solid #ddd;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
         <div style="background:#fef9e7;border:1px solid #f39c12;padding:12px;border-radius:6px;margin-bottom:24px;">
           <strong style="color:#e67e22;">&#9888; ${t.total} alerta(s) novo(s)</strong>
-          &mdash; ${t.dou} do DOU, ${t.ibama} do IBAMA
+          &mdash; ${t.dou} do DOU, ${t.ibama} do IBAMA, ${t.diarios} de diarios estaduais
         </div>
 
         ${secaoDOU}
         ${secaoIBAMA}
+        ${secaoDiarios}
 
         <div style="font-size:11px;color:#aaa;margin-top:24px;padding-top:16px;border-top:1px solid #eee;">
           Gerado em ${relatorio.executadoEm} &mdash; Monitor de Licencas Ambientais
@@ -125,6 +160,7 @@ async function enviarAlerta(relatorio, opcoes = {}) {
   const partes = [];
   if (t.dou > 0) partes.push(`${t.dou} DOU`);
   if (t.ibama > 0) partes.push(`${t.ibama} IBAMA`);
+  if (t.diarios > 0) partes.push(`${t.diarios} diarios estaduais`);
   const prefixoCliente = relatorio.clienteNome ? `${relatorio.clienteNome} — ` : '';
   const assunto = `[Monitor Ambiental] ${prefixoCliente}${t.total} alerta(s) — ${partes.join(', ')} — ${relatorio.data}`;
   const html = gerarHtml(relatorio);
