@@ -9,32 +9,20 @@ const { buscarDOU, dataDeHoje } = require('./dou');
 const { enviarAlerta } = require('./alerta');
 const { inicializarDB, filtrarNaoAlertadas, marcarComoAlertadas } = require('./dedup');
 const { buscarFonte: buscarFonteIBAMA, normalizarCNPJ } = require('./ibama');
+const { carregarConfig } = require('./config-loader');
 const logger = require('./log');
-
-// Carrega config.json e, se existir, mescla config.local.json por cima.
-// config.local.json fica fora do git e guarda segredos (ex: API keys).
-function carregarConfig() {
-  const base = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
-  const localPath = './config.local.json';
-  if (fs.existsSync(localPath)) {
-    const local = JSON.parse(fs.readFileSync(localPath, 'utf-8'));
-    for (const [secao, valores] of Object.entries(local)) {
-      base[secao] = { ...(base[secao] || {}), ...valores };
-    }
-  }
-  return base;
-}
 
 const config = carregarConfig();
 
 // Verifica se uma publicacao e relevante para monitoramento ambiental.
 // Criterios: o tipo OU o titulo contem palavras do filtro configurado.
-function ehRelevante(pub) {
+// cfg e injetavel para permitir testar a funcao de forma isolada.
+function ehRelevante(pub, cfg = config) {
   const tipoLower = pub.tipo.toLowerCase();
   const tituloLower = pub.titulo.toLowerCase();
   const resumoLower = pub.resumo.toLowerCase();
 
-  const { tiposRelevantes, palavrasChaveTitulo } = config.filtro;
+  const { tiposRelevantes, palavrasChaveTitulo } = cfg.filtro;
 
   const tipoOk = tiposRelevantes.some((t) => tipoLower.includes(t.toLowerCase()));
   const tituloOk = palavrasChaveTitulo.some(
@@ -64,6 +52,12 @@ function imprimirRelatorio(relatorio) {
     totalJaAlertadas += jaAlertadasN;
 
     console.log(`\n--- ${res.empresa} (${res.cnpj}) ---`);
+
+    if (res.erro) {
+      console.log(`  ERRO na busca: ${res.erro}`);
+      continue;
+    }
+
     console.log(
       `Publicacoes encontradas: ${res.totalEncontradas} | Novas: ${res.relevantes.length} | Ja alertadas: ${jaAlertadasN}`
     );
@@ -164,12 +158,30 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
     // Aspas forcam correspondencia exata da frase completa.
     // Sem aspas, o portal tokeniza o CNPJ e retorna falsos positivos.
     const termoBusca = `"${empresa.cnpj}"`;
-    const resultado = await buscarDOU(browser, termoBusca, {
-      publishFrom: hoje,
-      publishTo: hoje,
-    });
 
-    const relevantesTodos = resultado.publicacoes.filter(ehRelevante);
+    // Uma falha na busca de uma empresa nao pode derrubar as demais nem o
+    // bloco IBAMA: o erro e registrado no relatorio e a execucao continua.
+    let resultado;
+    try {
+      resultado = await buscarDOU(browser, termoBusca, {
+        publishFrom: hoje,
+        publishTo: hoje,
+      });
+    } catch (err) {
+      console.error(`  Erro ao buscar ${empresa.nome} no DOU: ${err.message}`);
+      relatorio.resultados.push({
+        empresa: empresa.nome,
+        cnpj: empresa.cnpj,
+        totalEncontradas: 0,
+        relevantes: [],
+        jaAlertadas: [],
+        todas: [],
+        erro: err.message,
+      });
+      continue;
+    }
+
+    const relevantesTodos = resultado.publicacoes.filter((pub) => ehRelevante(pub));
     const { novas, jaAlertadas } = filtrarNaoAlertadas(db, relevantesTodos, 'DOU');
 
     for (const pub of novas) {
@@ -291,4 +303,4 @@ if (require.main === module) {
   executarMonitor(dataArg ? { data: dataArg } : {}).catch(console.error);
 }
 
-module.exports = { executarMonitor };
+module.exports = { executarMonitor, ehRelevante };

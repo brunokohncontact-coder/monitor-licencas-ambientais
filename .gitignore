@@ -6,16 +6,14 @@ config.local.json
 .env
 .env.local
 
-# Permissoes locais do Claude Code (especificas da sua maquina)
-.claude/settings.local.json
+# Arquivos de ferramentas de IA (especificos da sua maquina)
+.claude/
+.claudiomiro/
 
 # Estado runtime (banco SQLite + WAL)
 dedup.db
 dedup.db-wal
 dedup.db-shm
-teste-dedup.db
-teste-dedup.db-wal
-teste-dedup.db-shm
 
 # Cache de CSVs do IBAMA (~160 MB, regenerado pelo proprio codigo)
 ibama-cache/

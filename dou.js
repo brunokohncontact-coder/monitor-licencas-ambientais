@@ -2,6 +2,7 @@
 // Recebe um termo e opcoes, devolve array de publicacoes estruturadas.
 
 const { chromium } = require('playwright');
+const { comRetentativa } = require('./retry');
 
 const BASE_URL = 'https://www.in.gov.br/consulta/-/buscar/dou';
 
@@ -88,18 +89,35 @@ function buildProximaPaginaUrl(termo, result, nextPage) {
   return `${BASE_URL}?${new URLSearchParams(params)}`;
 }
 
+// Carrega uma URL do DOU e extrai a pagina. Lanca erro se a extracao falhar
+// (a pagina nao respondeu a tempo) — esse e o sinal de falha real que dispara
+// a retentativa. Um resultado com zero publicacoes NAO e erro: significa que
+// o portal simplesmente nao tinha nada para aquele termo/data.
+async function carregarComExtracao(page, url) {
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
+  const resultado = await extrairPagina(page);
+  if (!resultado) {
+    throw new Error('DOU nao respondeu a tempo (extracao da pagina falhou)');
+  }
+  return resultado;
+}
+
 // Funcao principal: busca um termo no DOU e devolve publicacoes estruturadas.
 // browser: instancia do Playwright (passada de fora pra reutilizar entre buscas)
 // termo: string a buscar (ex: CNPJ, nome da empresa, termo ambiental)
 // opcoes.publishFrom/publishTo: data no formato dd-MM-yyyy
 // opcoes.delta: itens por pagina (max 75)
 // opcoes.maxPaginas: limite de paginas (padrao 3)
+// opcoes.tentativas: numero de tentativas por pagina em caso de falha (padrao 3)
+// opcoes.esperaBaseMs: espera base entre tentativas, com backoff (padrao 2000)
 async function buscarDOU(browser, termo, opcoes = {}) {
   const {
     publishFrom = null,
     publishTo = null,
     delta = 75,
     maxPaginas = 3,
+    tentativas = 3,
+    esperaBaseMs = 2000,
   } = opcoes;
 
   const params = {
@@ -122,12 +140,31 @@ async function buscarDOU(browser, termo, opcoes = {}) {
   });
   const page = await context.newPage();
 
-  await page.goto(url1, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-  let resultadoAtual = await extrairPagina(page);
+  // Aviso padronizado a cada tentativa que falha — vai para console e log.
+  const avisarRetentativa = (erro, tentativa, espera) => {
+    console.warn(
+      `  Busca DOU falhou (tentativa ${tentativa}/${tentativas}): ${erro.message}. ` +
+        `Nova tentativa em ${Math.round(espera / 1000)}s...`
+    );
+  };
 
-  if (!resultadoAtual || resultadoAtual.publicacoes.length === 0) {
+  let resultadoAtual;
+  try {
+    resultadoAtual = await comRetentativa(() => carregarComExtracao(page, url1), {
+      tentativas,
+      esperaBaseMs,
+      aoFalhar: avisarRetentativa,
+    });
+  } catch (erro) {
     await context.close();
-    return { publicacoes: [], totalResultados: resultadoAtual?.totalResultados || '0' };
+    throw new Error(
+      `Busca no DOU falhou apos ${tentativas} tentativas: ${erro.message}`
+    );
+  }
+
+  if (resultadoAtual.publicacoes.length === 0) {
+    await context.close();
+    return { publicacoes: [], totalResultados: resultadoAtual.totalResultados || '0' };
   }
 
   const todasPublicacoes = [...resultadoAtual.publicacoes];
@@ -136,9 +173,25 @@ async function buscarDOU(browser, termo, opcoes = {}) {
   while (paginaAtual < Math.min(resultadoAtual.totalPages, maxPaginas)) {
     const proxPag = paginaAtual + 1;
     const urlProx = buildProximaPaginaUrl(termo, resultadoAtual, proxPag);
-    await page.goto(urlProx, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {});
-    const res = await extrairPagina(page);
-    if (!res || res.publicacoes.length === 0) break;
+
+    // Falha numa pagina seguinte nao descarta o que ja foi coletado: depois
+    // de esgotar as tentativas, avisa e segue com as publicacoes em maos.
+    let res;
+    try {
+      res = await comRetentativa(() => carregarComExtracao(page, urlProx), {
+        tentativas,
+        esperaBaseMs,
+        aoFalhar: avisarRetentativa,
+      });
+    } catch (erro) {
+      console.warn(
+        `  Pagina ${proxPag} do DOU falhou apos ${tentativas} tentativas: ` +
+          `${erro.message}. Seguindo com ${todasPublicacoes.length} publicacoes ja coletadas.`
+      );
+      break;
+    }
+
+    if (res.publicacoes.length === 0) break;
     todasPublicacoes.push(...res.publicacoes);
     resultadoAtual = res;
     paginaAtual = proxPag;
