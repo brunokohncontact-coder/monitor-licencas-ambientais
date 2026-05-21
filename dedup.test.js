@@ -5,10 +5,15 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const Database = require('better-sqlite3');
 const {
   inicializarDB,
   filtrarNaoAlertadas,
   marcarComoAlertadas,
+  marcarIdsComoAlertadas,
   contar,
 } = require('./dedup');
 
@@ -90,4 +95,65 @@ test('PK composta: mesma classPK em fonte diferente nao colide', () => {
     2,
     'a marcacao em IBAMA nao afetou os registros do DOU'
   );
+});
+
+// --- Isolamento por cliente_id ---
+
+test('isolamento por cliente_id: mesmo classPK, clientes diferentes nao colidem', () => {
+  const dbIso = inicializarDB(':memory:');
+  const pub = [{ classPK: 'PK-ISO', titulo: 'Publicacao compartilhada', data: '20/05/2026' }];
+  const ctx = { 'PK-ISO': { cnpj: '11.111.111/0001-11', empresa: 'Empresa Iso' } };
+
+  marcarComoAlertadas(dbIso, pub, ctx, 'DOU', 'cliente-A');
+
+  const rB = filtrarNaoAlertadas(dbIso, pub, 'DOU', 'cliente-B');
+  assert.strictEqual(rB.novas.length, 1, 'cliente-B ainda nao alertado: deve ver como nova');
+  assert.strictEqual(rB.jaAlertadas.length, 0);
+
+  const rA = filtrarNaoAlertadas(dbIso, pub, 'DOU', 'cliente-A');
+  assert.strictEqual(rA.jaAlertadas.length, 1, 'cliente-A ja alertado: deve reconhecer');
+  assert.strictEqual(rA.novas.length, 0);
+});
+
+test('marcarIdsComoAlertadas com cliente_id: registros isolados por cliente', () => {
+  const dbIds = inicializarDB(':memory:');
+
+  marcarIdsComoAlertadas(dbIds, 'IBAMA', ['SEQ-001', 'SEQ-002'], 'cliente-X', { cnpj: '22.222.222/0001-22', empresa: 'Empresa X' });
+
+  assert.strictEqual(contar(dbIds, 'IBAMA', null, 'cliente-X'), 2);
+  assert.strictEqual(contar(dbIds, 'IBAMA', null, 'cliente-Y'), 0, 'cliente-Y nao tem registros');
+});
+
+// --- Migracao v2 -> v3 ---
+
+test('migracao v2->v3: linhas existentes recebem cliente_id=default', () => {
+  const tmpPath = path.join(os.tmpdir(), `dedup-test-migration-${Date.now()}.db`);
+  try {
+    // Monta um banco com schema v2 (sem cliente_id) e insere uma linha legada.
+    const dbV2 = new Database(tmpPath);
+    dbV2.exec(`
+      CREATE TABLE alertas_enviados (
+        fonte TEXT NOT NULL,
+        classPK TEXT NOT NULL,
+        cnpj TEXT NOT NULL,
+        empresa TEXT NOT NULL,
+        titulo TEXT,
+        data_publicacao TEXT,
+        alertado_em TEXT NOT NULL,
+        PRIMARY KEY (fonte, classPK)
+      );
+      INSERT INTO alertas_enviados
+        VALUES ('DOU', 'PK-LEGACY', '00.000.000/0001-00', 'Empresa Antiga', 'titulo legado', '2024-01-01', '2024-01-01T00:00:00.000Z');
+    `);
+    dbV2.close();
+
+    // Abre o banco via inicializarDB — deve detectar schema v2 e migrar.
+    const migrado = inicializarDB(tmpPath);
+    const row = migrado.prepare('SELECT * FROM alertas_enviados WHERE fonte=? AND classPK=?').get('DOU', 'PK-LEGACY');
+    assert.ok(row, 'linha legada deve ser preservada apos migracao');
+    assert.strictEqual(row.cliente_id, 'default', 'linha legada deve receber cliente_id=default');
+    migrado.close();
+  } finally {
+    try { fs.unlinkSync(tmpPath); } catch { /* noop */ }
+  }
 });
