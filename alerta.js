@@ -1,5 +1,7 @@
 // Modulo de alertas por e-mail — usa Resend para enviar notificacoes.
-// So envia e-mail se houver ao menos uma publicacao relevante no relatorio.
+// E chamado uma vez por cliente: recebe os dados daquele cliente
+// ({ data, executadoEm, clienteNome, resultados, ibama }) e seus
+// destinatarios. So envia se houver ao menos uma publicacao nova.
 
 const { Resend } = require('resend');
 
@@ -81,7 +83,7 @@ function gerarHtml(relatorio) {
     <body style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;color:#333;">
       <div style="background:#2c3e50;color:white;padding:20px;border-radius:8px 8px 0 0;">
         <h2 style="margin:0;">Monitor de Licencas Ambientais</h2>
-        <div style="font-size:14px;opacity:0.8;margin-top:4px;">${relatorio.data}</div>
+        <div style="font-size:14px;opacity:0.8;margin-top:4px;">${relatorio.clienteNome ? `${relatorio.clienteNome} &mdash; ` : ''}${relatorio.data}</div>
       </div>
 
       <div style="background:white;border:1px solid #ddd;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
@@ -123,7 +125,8 @@ async function enviarAlerta(relatorio, opcoes = {}) {
   const partes = [];
   if (t.dou > 0) partes.push(`${t.dou} DOU`);
   if (t.ibama > 0) partes.push(`${t.ibama} IBAMA`);
-  const assunto = `[Monitor Ambiental] ${t.total} alerta(s) — ${partes.join(', ')} — ${relatorio.data}`;
+  const prefixoCliente = relatorio.clienteNome ? `${relatorio.clienteNome} — ` : '';
+  const assunto = `[Monitor Ambiental] ${prefixoCliente}${t.total} alerta(s) — ${partes.join(', ')} — ${relatorio.data}`;
   const html = gerarHtml(relatorio);
 
   try {

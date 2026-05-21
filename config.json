@@ -1,14 +1,28 @@
 {
-  "empresas": [
+  "_comentario": "Cada cliente tem sua propria lista de empresas e seus destinatarios de e-mail. As secoes filtro, agendamento, alerta e ibama sao globais. A chave da API Resend mora em config.local.json (fora do git).",
+
+  "clientes": [
     {
-      "nome": "CETESB - Companhia Ambiental do Estado de São Paulo",
-      "cnpj": "43.776.491/0001-70",
-      "ativa": true
-    },
-    {
-      "nome": "Ambiental Consultoria & Serviços Ltda",
-      "cnpj": "16.458.199/0001-36",
-      "ativa": true
+      "id": "default",
+      "nome": "Cliente Padrao",
+      "ativo": true,
+      "empresas": [
+        {
+          "nome": "CETESB - Companhia Ambiental do Estado de São Paulo",
+          "cnpj": "43.776.491/0001-70",
+          "ativa": true,
+          "uf": "SP"
+        },
+        {
+          "nome": "Ambiental Consultoria & Serviços Ltda",
+          "cnpj": "16.458.199/0001-36",
+          "ativa": true,
+          "uf": "SP"
+        }
+      ],
+      "alerta": {
+        "para": ["brunokohn.contact@gmail.com"]
+      }
     }
   ],
 
@@ -46,10 +60,7 @@
 
   "alerta": {
     "ativo": true,
-    "_comentario_chave": "A chave da API Resend mora em config.local.json (fora do git). Veja README/config.local.example.json.",
-    "resendApiKey": "",
-    "de": "onboarding@resend.dev",
-    "para": ["brunokohn.contact@gmail.com"]
+    "de": "onboarding@resend.dev"
   },
 
   "ibama": {
