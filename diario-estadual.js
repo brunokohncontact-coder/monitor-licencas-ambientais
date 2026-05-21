@@ -210,5 +210,4 @@ module.exports = {
   ufsParaVarrer,
   normalizarPublicacaoDOESP,
   buscarDOESP,
-  formatarDataPublicacao,
 };
