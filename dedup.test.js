@@ -16,6 +16,9 @@ const {
 // os casos sao sequenciais e dependentes, como no script original.
 const db = inicializarDB(':memory:');
 
+// cliente_id fixo para todos os testes — isolamento por cliente e TASK3.
+const CLIENT_ID = 'test-client';
+
 const pubsLote1 = [
   { classPK: 'PK-001', titulo: 'Renovacao de licenca CETESB', data: '15/05/2026' },
   { classPK: 'PK-002', titulo: 'Auto de infracao IBAMA', data: '15/05/2026' },
@@ -27,18 +30,18 @@ const contexto1 = {
 };
 
 test('primeira execucao: todas as publicacoes sao novas', () => {
-  const r = filtrarNaoAlertadas(db, pubsLote1, 'DOU');
+  const r = filtrarNaoAlertadas(db, pubsLote1, 'DOU', CLIENT_ID);
   assert.strictEqual(r.novas.length, 2);
   assert.strictEqual(r.jaAlertadas.length, 0);
 });
 
 test('marcarComoAlertadas grava as publicacoes enviadas', () => {
-  const n = marcarComoAlertadas(db, pubsLote1, contexto1, 'DOU');
+  const n = marcarComoAlertadas(db, pubsLote1, contexto1, 'DOU', CLIENT_ID);
   assert.strictEqual(n, 2);
 });
 
 test('segunda execucao: publicacoes ja alertadas sao reconhecidas', () => {
-  const r = filtrarNaoAlertadas(db, pubsLote1, 'DOU');
+  const r = filtrarNaoAlertadas(db, pubsLote1, 'DOU', CLIENT_ID);
   assert.strictEqual(r.novas.length, 0);
   assert.strictEqual(r.jaAlertadas.length, 2);
 });
@@ -48,19 +51,19 @@ test('lote misto: separa a publicacao nova da ja alertada', () => {
     { classPK: 'PK-001', titulo: 'duplicada', data: '15/05/2026' },
     { classPK: 'PK-003', titulo: 'Embargo novo', data: '16/05/2026' },
   ];
-  const r = filtrarNaoAlertadas(db, lote2, 'DOU');
+  const r = filtrarNaoAlertadas(db, lote2, 'DOU', CLIENT_ID);
   assert.strictEqual(r.novas.length, 1);
   assert.strictEqual(r.jaAlertadas.length, 1);
   assert.strictEqual(r.novas[0].classPK, 'PK-003');
 });
 
 test('publicacao sem classPK e tratada como nova (nao da para deduplicar)', () => {
-  const r = filtrarNaoAlertadas(db, [{ classPK: '', titulo: 'sem id', data: '17/05/2026' }], 'DOU');
+  const r = filtrarNaoAlertadas(db, [{ classPK: '', titulo: 'sem id', data: '17/05/2026' }], 'DOU', CLIENT_ID);
   assert.strictEqual(r.novas.length, 1);
 });
 
 test('marcacao e idempotente: remarcar nao duplica', () => {
-  const n = marcarComoAlertadas(db, pubsLote1, contexto1, 'DOU');
+  const n = marcarComoAlertadas(db, pubsLote1, contexto1, 'DOU', CLIENT_ID);
   assert.strictEqual(n, 0);
 });
 
@@ -72,18 +75,18 @@ test('contar: total geral e total por fonte/cnpj', () => {
 test('PK composta: mesma classPK em fonte diferente nao colide', () => {
   const pubsIBAMA = [{ classPK: 'PK-001', titulo: 'IBAMA mesma PK', data: '17/05/2026' }];
 
-  const r = filtrarNaoAlertadas(db, pubsIBAMA, 'IBAMA');
+  const r = filtrarNaoAlertadas(db, pubsIBAMA, 'IBAMA', CLIENT_ID);
   assert.strictEqual(r.novas.length, 1, 'mesma PK que o DOU, mas em IBAMA, e nova');
 
-  marcarComoAlertadas(db, pubsIBAMA, { 'PK-001': { cnpj: 'x', empresa: 'y' } }, 'IBAMA');
+  marcarComoAlertadas(db, pubsIBAMA, { 'PK-001': { cnpj: 'x', empresa: 'y' } }, 'IBAMA', CLIENT_ID);
 
   assert.strictEqual(
-    filtrarNaoAlertadas(db, pubsIBAMA, 'IBAMA').jaAlertadas.length,
+    filtrarNaoAlertadas(db, pubsIBAMA, 'IBAMA', CLIENT_ID).jaAlertadas.length,
     1,
     'apos marcar, a PK em IBAMA e reconhecida como ja alertada'
   );
   assert.strictEqual(
-    filtrarNaoAlertadas(db, pubsLote1, 'DOU').jaAlertadas.length,
+    filtrarNaoAlertadas(db, pubsLote1, 'DOU', CLIENT_ID).jaAlertadas.length,
     2,
     'a marcacao em IBAMA nao afetou os registros do DOU'
   );
