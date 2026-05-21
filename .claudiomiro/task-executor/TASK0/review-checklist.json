@@ -9,7 +9,7 @@
       "lines": [14, 36],
       "type": "exists",
       "description": "O loop em comRetentativa (linhas 20-33) nao espera apos a ultima tentativa (linha 25: tentativa < tentativas). Confirmar que o comportamento esta correto para evitar espera desnecessaria quando todas as tentativas sao esgotadas.",
-      "reviewed": false,
+      "reviewed": true,
       "category": "completeness",
       "context": {
         "action": "Verificacao do helper comRetentativa com backoff exponencial",
@@ -22,7 +22,7 @@
       "lines": [16, 28],
       "type": "exists",
       "description": "A guarda 'if (espera > 0)' na linha 28 permite usar esperaBaseMs=0 nos testes. Confirmar que esperaBaseMs=0 com tentativas=1 retorna imediatamente sem chamar setTimeout.",
-      "reviewed": false,
+      "reviewed": true,
       "category": "testing",
       "context": {
         "action": "Verificacao do comportamento com esperaBaseMs=0 (usado nos testes da fase 3)",
@@ -35,7 +35,7 @@
       "lines": [96, 103],
       "type": "exists",
       "description": "A funcao carregarComExtracao (linhas 96-103) lanca erro apenas quando extrairPagina retorna null (timeout/falha real), nao quando retorna zero resultados. Confirmar que a condicao if (!resultado) na linha 99 distingue corretamente falha real de resultado vazio.",
-      "reviewed": false,
+      "reviewed": true,
       "category": "error-handling",
       "context": {
         "action": "Verificacao de que contagem zero de resultados nao dispara retry",
@@ -48,7 +48,7 @@
       "lines": [152, 163, 180, 192],
       "type": "exists",
       "description": "comRetentativa envolve apenas carregarComExtracao nas linhas 153 e 181. Confirmar que nenhuma comparacao de contagens de resultados ocorre dentro desses blocos retry.",
-      "reviewed": false,
+      "reviewed": true,
       "category": "completeness",
       "context": {
         "action": "Verificacao de que retry so envolve operacoes de rede/extracao",
@@ -61,7 +61,7 @@
       "lines": [151, 168],
       "type": "exists",
       "description": "O try/catch por empresa em processarDOUDoCliente (linhas 151-168) registra resultado.erro e usa continue para continuar o laco. Confirmar que a execucao realmente continua para a proxima empresa e nao para completamente.",
-      "reviewed": false,
+      "reviewed": true,
       "category": "error-handling",
       "context": {
         "action": "Verificacao do isolamento de falha por empresa no DOU",
@@ -74,7 +74,7 @@
       "lines": [157, 166],
       "type": "exists",
       "description": "A mensagem de erro na linha 157 usa console.error em portugues sem acento. Confirmar que err.message (que vem do throw em buscarDOU) tambem esta em portugues.",
-      "reviewed": false,
+      "reviewed": true,
       "category": "data-flow",
       "context": {
         "action": "Verificacao de que mensagens de erro em cascata (dou.js -> monitor.js) estao em portugues",
