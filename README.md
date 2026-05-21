@@ -132,6 +132,7 @@ arquivo tem uma responsabilidade clara:
 | `dou.js`           | Busca publicacoes no portal do DOU                          |
 | `ibama.js`         | Baixa e filtra os dados abertos do IBAMA                     |
 | `diario-estadual.js` | Registry de diarios estaduais por UF; busca no DOESP (SP)  |
+| `icmbio.js`        | Categoriza publicacoes do DOU emitidas pelo ICMBio          |
 | `dedup.js`         | Guarda em SQLite o que ja foi alertado, para nao repetir     |
 | `alerta.js`        | Monta e envia o e-mail de alerta                            |
 | `config-loader.js` | Le e mescla `config.json` + `config.local.json`             |
@@ -154,8 +155,9 @@ cada etapa concluida.
   - Etapa 1 (concluida) — robustez e cobertura de testes automatizados.
   - Etapa 2 (concluida) — **suporte a multiplos clientes**: cada cliente com
     suas empresas, sua deduplicacao isolada e seu e-mail proprio.
-  - Etapa 3 (em andamento) — **mais fontes de dados**: diarios oficiais
-    estaduais (ver secao abaixo); o painel web vem na etapa seguinte.
+  - Etapa 3 (concluida) — **mais fontes de dados**: diarios oficiais
+    estaduais (DOESP) e categorizacao das publicacoes do ICMBio no DOU
+    (ver secoes abaixo); o painel web vem na etapa seguinte.
 
 ## Diarios oficiais estaduais
 
@@ -182,3 +184,40 @@ encontra o CNPJ quando ele e pesquisado **formatado** (com pontuacao, ex.:
 `43.776.491/0001-70`), pois e assim que o numero aparece no texto das
 publicacoes. O monitor pesquisa o CNPJ exatamente como ele esta no
 `config.json` (formato com pontuacao), entao isso ja esta coberto.
+
+## Categorizacao ICMBio (DOU)
+
+Alem das fontes acima, o monitor identifica no proprio fluxo do DOU as
+publicacoes emitidas pelo **ICMBio** (Instituto Chico Mendes de Conservacao
+da Biodiversidade). Cada publicacao do DOU passa a ter um campo
+`orgaoCategoria`: quando o orgao emissor menciona o ICMBio, o valor e
+`"ICMBio"`; caso contrario, `null`.
+
+A logica de categorizacao mora em `icmbio.js`, na funcao **pura e testavel**
+`categorizarOrgao` — a mesma publicacao na entrada produz sempre a mesma
+saida, sem rede e sem estado. As publicacoes do ICMBio aparecem
+**destacadas**: com um selo `[ICMBio]` no relatorio do console, um selo
+colorido no e-mail HTML, e um total proprio na linha-resumo do DOU.
+
+### Investigacao de dados abertos do ICMBio (maio/2026)
+
+A etapa tambem previa investigar `dados.gov.br` e o portal do ICMBio atras
+de datasets de autuacoes/embargos em Unidades de Conservacao que pudessem
+virar uma nova fonte automatica, no mesmo padrao das fontes do IBAMA
+(`ibama.js`: download de um zip de CSV, parse em streaming, filtro por CNPJ).
+
+**Resultado:** o ICMBio **publica** dados de fiscalizacao (autos de infracao
+e areas embargadas, com atualizacao mensal), porem **apenas em formato
+geoespacial** — geoservicos WFS/WMS no geoserver da INDE (camadas
+`ICMBio:autos_infracao_icmbio` e `ICMBio:embargos_icmbio`) e arquivos
+shapefile / KMZ / XLS no portal de Dados Geoespaciais. **Nao existe** um zip
+de CSV em massa equivalente ao `auto_infracao_csv.zip` do IBAMA.
+
+**Limitacao documentada:** por isso, o padrao de fontes do `ibama.js` nao se
+aplica ao ICMBio, e **nenhuma fonte automatica de dados abertos do ICMBio foi
+adicionada** nesta etapa — faze-lo exigiria inventar o schema de colunas, o
+que foi deliberadamente evitado. Integrar essas autuacoes/embargos no futuro
+exigiria um modulo geoespacial novo (cliente WFS + parse de GeoJSON/GML),
+fora do padrao zip+CSV atual. A cobertura do ICMBio nesta etapa e feita pela
+categorizacao das publicacoes do ICMBio no DOU, descrita acima. O comentario
+de cabecalho de `icmbio.js` registra essa mesma limitacao no codigo.
