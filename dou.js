@@ -3,6 +3,7 @@
 
 const { chromium } = require('playwright');
 const { comRetentativa } = require('./retry');
+const { categorizarOrgao } = require('./icmbio');
 
 const BASE_URL = 'https://www.in.gov.br/consulta/-/buscar/dou';
 
@@ -199,22 +200,27 @@ async function buscarDOU(browser, termo, opcoes = {}) {
 
   await context.close();
 
-  // Normalizar dados antes de retornar
+  // Normalizar dados antes de retornar. orgaoCategoria classifica o orgao
+  // emissor (ex: 'ICMBio') a partir do shape ja normalizado — ver icmbio.js.
   return {
     totalResultados: resultadoAtual.totalResultados,
-    publicacoes: todasPublicacoes.map((pub) => ({
-      tipo: pub.artType || '',
-      secao: pub.pubName || '',
-      orgaos: pub.hierarchyList || [],
-      orgaoStr: pub.hierarchyStr || '',
-      edicao: pub.editionNumber || '',
-      pagina: pub.numberPage || '',
-      titulo: pub.title || '',
-      data: pub.pubDate || '',
-      link: `https://www.in.gov.br/web/dou/-/${pub.urlTitle}`,
-      resumo: limparHTML(pub.content),
-      classPK: pub.classPK || '',
-    })),
+    publicacoes: todasPublicacoes.map((pub) => {
+      const normalizada = {
+        tipo: pub.artType || '',
+        secao: pub.pubName || '',
+        orgaos: pub.hierarchyList || [],
+        orgaoStr: pub.hierarchyStr || '',
+        edicao: pub.editionNumber || '',
+        pagina: pub.numberPage || '',
+        titulo: pub.title || '',
+        data: pub.pubDate || '',
+        link: `https://www.in.gov.br/web/dou/-/${pub.urlTitle}`,
+        resumo: limparHTML(pub.content),
+        classPK: pub.classPK || '',
+      };
+      normalizada.orgaoCategoria = categorizarOrgao(normalizada);
+      return normalizada;
+    }),
   };
 }
 

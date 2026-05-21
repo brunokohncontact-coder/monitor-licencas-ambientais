@@ -48,6 +48,7 @@ function imprimirRelatorio(relatorio) {
 
   let totalDOUNovas = 0;
   let totalDOUJa = 0;
+  let totalDOUICMBio = 0;
   let totalIBAMANovas = 0;
   let totalIBAMAJa = 0;
   let totalDiariosNovas = 0;
@@ -88,8 +89,13 @@ function imprimirRelatorio(relatorio) {
 
       totalDOUNovas += res.relevantes.length;
       res.relevantes.forEach((pub, i) => {
-        console.log(`\n  [${i + 1}] ${pub.tipo} — ${pub.data}`);
+        // Publicacoes do ICMBio (orgaoCategoria) ganham um selo destacado.
+        const ehICMBio = pub.orgaoCategoria === 'ICMBio';
+        if (ehICMBio) totalDOUICMBio += 1;
+        const selo = ehICMBio ? ' [ICMBio]' : '';
+        console.log(`\n  [${i + 1}] ${pub.tipo} — ${pub.data}${selo}`);
         console.log(`  Orgao:  ${pub.orgaoStr}`);
+        if (ehICMBio) console.log(`  Categoria: ICMBio`);
         console.log(`  Titulo: ${pub.titulo}`);
         console.log(`  Link:   ${pub.link}`);
         console.log(`  Resumo: ${pub.resumo.slice(0, 200)}...`);
@@ -146,7 +152,9 @@ function imprimirRelatorio(relatorio) {
   }
 
   console.log(`\n${linha}`);
-  console.log(`DOU — novos: ${totalDOUNovas} | ja alertados: ${totalDOUJa}`);
+  console.log(
+    `DOU — novos: ${totalDOUNovas} | ja alertados: ${totalDOUJa} | categoria ICMBio: ${totalDOUICMBio}`
+  );
   console.log(`IBAMA — novos: ${totalIBAMANovas} | ja alertados: ${totalIBAMAJa}`);
   console.log(
     `Diarios estaduais — novos: ${totalDiariosNovas} | ja alertados: ${totalDiariosJa}`

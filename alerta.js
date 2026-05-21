@@ -27,16 +27,21 @@ function gerarHtml(relatorio) {
     .filter((r) => r.relevantes.length > 0)
     .map((res) => {
       const pubs = res.relevantes
-        .map(
-          (pub, i) => `
+        .map((pub) => {
+          // Publicacoes do ICMBio (orgaoCategoria) recebem um selo destacado.
+          const seloICMBio =
+            pub.orgaoCategoria === 'ICMBio'
+              ? ' <span style="display:inline-block; background:#16635a; color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px;">ICMBio</span>'
+              : '';
+          return `
           <div style="margin:12px 0; padding:12px; background:#f8f9fa; border-left:3px solid #e74c3c; border-radius:4px;">
-            <div style="font-size:12px; color:#666; margin-bottom:4px;">${pub.tipo} &mdash; ${pub.data}</div>
+            <div style="font-size:12px; color:#666; margin-bottom:4px;">${pub.tipo} &mdash; ${pub.data}${seloICMBio}</div>
             <div style="font-weight:600; margin-bottom:4px;">${pub.titulo || '(sem titulo)'}</div>
             <div style="font-size:12px; color:#555; margin-bottom:6px;">${pub.orgaoStr}</div>
             <div style="font-size:13px; color:#333; margin-bottom:8px;">${pub.resumo.slice(0, 300)}${pub.resumo.length > 300 ? '...' : ''}</div>
             <a href="${pub.link}" style="font-size:12px; color:#2980b9;">Ver no DOU &rarr;</a>
-          </div>`
-        )
+          </div>`;
+        })
         .join('');
 
       return `
