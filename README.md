@@ -14,11 +14,14 @@ cada cliente ativo e cada empresa desse cliente, o monitor:
    as publicacoes relevantes para a area ambiental.
 2. **Consulta os dados abertos do IBAMA** — autos de infracao e termos de
    embargo — cruzando pelo CNPJ.
-3. **Deduplica** os resultados por cliente: o que ja foi avisado antes nao e
+3. **Consulta os diarios oficiais estaduais** das UFs das empresas
+   monitoradas — hoje, o Diario Oficial do Estado de Sao Paulo (DOESP) —
+   buscando pelo CNPJ.
+4. **Deduplica** os resultados por cliente: o que ja foi avisado antes nao e
    avisado de novo (controle em banco SQLite, isolado por `cliente_id`).
-4. **Envia um e-mail por cliente**, contendo apenas os achados daquele
+5. **Envia um e-mail por cliente**, contendo apenas os achados daquele
    cliente, para os destinatarios daquele cliente (via servico Resend).
-5. **Salva um relatorio** do dia em arquivo `relatorio-AAAA-MM-DD.json`,
+6. **Salva um relatorio** do dia em arquivo `relatorio-AAAA-MM-DD.json`,
    com um bloco por cliente.
 
 Uma falha ao processar um cliente nao interrompe os demais: o erro fica
@@ -61,6 +64,10 @@ A configuracao fica em **dois arquivos**:
   relevante (global).
 - `agendamento` — horario da execucao automatica, formato cron (global).
 - `ibama` — quais fontes do IBAMA consultar e a janela de dias (global).
+- `diariosEstaduais` — diarios oficiais estaduais (global): `ativo` liga/desliga
+  a fonte, `estados` (ex.: `["SP"]`) sobrepoe quais UFs varrer — sem essa lista,
+  varre a uniao das UFs das empresas ativas — e `diasMaximos` define a janela
+  retroativa de busca em dias.
 - `alerta` — se o e-mail esta ativo e o remetente `de` (global). A chave da
   API Resend fica em `config.local.json`.
 
@@ -121,9 +128,10 @@ arquivo tem uma responsabilidade clara:
 
 | Arquivo            | Responsabilidade                                            |
 |--------------------|-------------------------------------------------------------|
-| `monitor.js`       | Orquestra todo o fluxo (DOU + IBAMA + dedup + alerta)       |
+| `monitor.js`       | Orquestra todo o fluxo (DOU + IBAMA + diarios + dedup + alerta) |
 | `dou.js`           | Busca publicacoes no portal do DOU                          |
 | `ibama.js`         | Baixa e filtra os dados abertos do IBAMA                     |
+| `diario-estadual.js` | Registry de diarios estaduais por UF; busca no DOESP (SP)  |
 | `dedup.js`         | Guarda em SQLite o que ja foi alertado, para nao repetir     |
 | `alerta.js`        | Monta e envia o e-mail de alerta                            |
 | `config-loader.js` | Le e mescla `config.json` + `config.local.json`             |
@@ -146,4 +154,31 @@ cada etapa concluida.
   - Etapa 1 (concluida) — robustez e cobertura de testes automatizados.
   - Etapa 2 (concluida) — **suporte a multiplos clientes**: cada cliente com
     suas empresas, sua deduplicacao isolada e seu e-mail proprio.
-  - Etapas seguintes — novas fontes de dados e um painel web.
+  - Etapa 3 (em andamento) — **mais fontes de dados**: diarios oficiais
+    estaduais (ver secao abaixo); o painel web vem na etapa seguinte.
+
+## Diarios oficiais estaduais
+
+O monitor consulta diarios oficiais estaduais por UF, atraves de um registry
+extensivel (`diario-estadual.js`) no mesmo padrao do registry de fontes do
+IBAMA. Cada UF registra uma funcao de busca que devolve publicacoes no mesmo
+shape normalizado do DOU.
+
+Hoje apenas **Sao Paulo (DOESP)** esta implementado. UFs sem implementacao
+sao **puladas com um aviso no console**, sem derrubar o restante do pipeline —
+basta registrar uma nova entrada no `diario-estadual.js` para cobrir outro
+estado no futuro.
+
+**Investigacao do portal DOESP (maio/2026).** O portal de busca do Diario
+Oficial de SP (`doe.sp.gov.br/busca-avancada`) e uma aplicacao de pagina unica
+(Next.js). A busca e atendida por um endpoint JSON publico,
+`GET https://do-api-web-search.doe.sp.gov.br/v2/advanced-search/publications`
+(parametros `Terms`, `FromDate`, `ToDate`, `PageNumber`, `PageSize`). Como o
+servico ja devolve JSON, essa fonte nao precisa de navegador (Playwright) —
+usa uma requisicao HTTPS direta.
+
+A **busca por CNPJ funciona**, com uma observacao importante: o portal so
+encontra o CNPJ quando ele e pesquisado **formatado** (com pontuacao, ex.:
+`43.776.491/0001-70`), pois e assim que o numero aparece no texto das
+publicacoes. O monitor pesquisa o CNPJ exatamente como ele esta no
+`config.json` (formato com pontuacao), entao isso ja esta coberto.
