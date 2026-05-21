@@ -13,12 +13,10 @@ const { DIARIOS, ufsParaVarrer } = require('./diario-estadual');
 const { carregarConfig } = require('./config-loader');
 const logger = require('./log');
 
-const config = carregarConfig();
-
 // Verifica se uma publicacao e relevante para monitoramento ambiental.
 // Criterios: o tipo OU o titulo contem palavras do filtro configurado.
 // cfg e injetavel para permitir testar a funcao de forma isolada.
-function ehRelevante(pub, cfg = config) {
+function ehRelevante(pub, cfg) {
   const tipoLower = pub.tipo.toLowerCase();
   const tituloLower = pub.titulo.toLowerCase();
   const resumoLower = pub.resumo.toLowerCase();
@@ -178,7 +176,7 @@ async function executarMonitor(opcoes = {}) {
 // Processa o DOU de um cliente: uma busca por empresa ativa. Devolve a lista
 // de resultados e preenche contextoDOU (classPK -> { cnpj, empresa }), usado
 // depois para enriquecer as marcacoes no banco.
-async function processarDOUDoCliente(browser, empresasAtivas, hoje, db, clienteId, contextoDOU) {
+async function processarDOUDoCliente(browser, empresasAtivas, hoje, db, clienteId, contextoDOU, config) {
   const resultados = [];
 
   for (const empresa of empresasAtivas) {
@@ -210,7 +208,7 @@ async function processarDOUDoCliente(browser, empresasAtivas, hoje, db, clienteI
       continue;
     }
 
-    const relevantesTodos = resultado.publicacoes.filter((pub) => ehRelevante(pub));
+    const relevantesTodos = resultado.publicacoes.filter((pub) => ehRelevante(pub, config));
     const { novas, jaAlertadas } = filtrarNaoAlertadas(db, relevantesTodos, 'DOU', clienteId);
 
     for (const pub of novas) {
@@ -239,7 +237,7 @@ async function processarDOUDoCliente(browser, empresasAtivas, hoje, db, clienteI
 // Processa o IBAMA de um cliente: para cada fonte configurada, busca as
 // publicacoes das empresas do cliente. Cada fonte tem seu try/catch — um erro
 // numa fonte nao derruba as outras nem o DOU.
-async function processarIBAMADoCliente(empresasAtivas, db, clienteId, contextoIBAMA) {
+async function processarIBAMADoCliente(empresasAtivas, db, clienteId, contextoIBAMA, config) {
   const cfgIbama = config.ibama || {};
   const ibamaPorFonte = {};
 
@@ -297,7 +295,7 @@ async function processarIBAMADoCliente(empresasAtivas, db, clienteId, contextoIB
 // diario implementado no registry, busca o CNPJ de cada empresa. UF sem
 // implementacao e pulada com aviso, sem erro. Cada UF tem seu try/catch — um
 // erro numa UF nao derruba as demais nem o resto do pipeline (padrao IBAMA).
-async function processarDiariosDoCliente(browser, empresasAtivas, db, clienteId, contextoDiarios) {
+async function processarDiariosDoCliente(browser, empresasAtivas, db, clienteId, contextoDiarios, config) {
   const cfg = config.diariosEstaduais || {};
   const diariosPorUF = {};
 
@@ -363,6 +361,7 @@ async function processarDiariosDoCliente(browser, empresasAtivas, db, clienteId,
 }
 
 async function executarMonitorInterno(opcoes, arquivoLog) {
+  const config = opcoes.config || carregarConfig();
   const hoje = opcoes.data || dataDeHoje();
 
   if (!hoje) {
@@ -408,15 +407,17 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
         hoje,
         db,
         cliente.id,
-        contextoDOU
+        contextoDOU,
+        config
       );
-      const ibama = await processarIBAMADoCliente(empresasAtivas, db, cliente.id, contextoIBAMA);
+      const ibama = await processarIBAMADoCliente(empresasAtivas, db, cliente.id, contextoIBAMA, config);
       const diariosEstaduais = await processarDiariosDoCliente(
         browser,
         empresasAtivas,
         db,
         cliente.id,
-        contextoDiarios
+        contextoDiarios,
+        config
       );
 
       relatorio.clientes.push({

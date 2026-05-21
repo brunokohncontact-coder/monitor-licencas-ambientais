@@ -30,3 +30,6 @@ dou-raw.html
 dou-rendered.html
 dou-network.json
 dou-resultados.json
+
+# Artefatos de runtime do painel web
+sessions/

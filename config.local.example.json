@@ -2,5 +2,8 @@
   "_comentario": "Copie este arquivo para config.local.json e preencha. Esse arquivo NAO vai para o git.",
   "alerta": {
     "resendApiKey": "re_SUA_CHAVE_RESEND_AQUI"
+  },
+  "painel": {
+    "senha": "SENHA_DO_PAINEL_AQUI"
   }
 }

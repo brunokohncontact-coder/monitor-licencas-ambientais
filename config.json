@@ -73,5 +73,9 @@
     "ativo": true,
     "estados": ["SP"],
     "diasMaximos": 7
+  },
+
+  "painel": {
+    "porta": 3000
   }
 }
