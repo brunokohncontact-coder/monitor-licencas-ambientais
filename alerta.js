@@ -151,4 +151,4 @@ async function enviarAlerta(relatorio, opcoes = {}) {
   }
 }
 
-module.exports = { enviarAlerta };
+module.exports = { enviarAlerta, gerarHtml, contarAlertas };

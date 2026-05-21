@@ -55,6 +55,11 @@ function imprimirRelatorio(relatorio) {
     console.log(`CLIENTE: ${cliente.clienteNome}`);
     console.log('#'.repeat(60));
 
+    if (cliente.erro) {
+      console.log(`  ERRO ao processar este cliente: ${cliente.erro}`);
+      continue;
+    }
+
     if (cliente.resultados.length === 0) {
       console.log('  Nenhuma empresa ativa para este cliente.');
     }
@@ -282,26 +287,39 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
       `\n=== Cliente: ${cliente.nome} (${empresasAtivas.length} empresa(s) ativa(s)) ===`
     );
 
-    const contextoDOU = {};
-    const contextoIBAMA = {};
+    // Uma falha ao processar um cliente nao pode derrubar os demais: o erro
+    // e registrado no bloco do cliente e o laco segue para o proximo.
+    try {
+      const contextoDOU = {};
+      const contextoIBAMA = {};
 
-    const resultados = await processarDOUDoCliente(
-      browser,
-      empresasAtivas,
-      hoje,
-      db,
-      cliente.id,
-      contextoDOU
-    );
-    const ibama = await processarIBAMADoCliente(empresasAtivas, db, cliente.id, contextoIBAMA);
+      const resultados = await processarDOUDoCliente(
+        browser,
+        empresasAtivas,
+        hoje,
+        db,
+        cliente.id,
+        contextoDOU
+      );
+      const ibama = await processarIBAMADoCliente(empresasAtivas, db, cliente.id, contextoIBAMA);
 
-    relatorio.clientes.push({
-      clienteId: cliente.id,
-      clienteNome: cliente.nome,
-      resultados,
-      ibama,
-    });
-    contextoPorCliente[cliente.id] = { dou: contextoDOU, ibama: contextoIBAMA };
+      relatorio.clientes.push({
+        clienteId: cliente.id,
+        clienteNome: cliente.nome,
+        resultados,
+        ibama,
+      });
+      contextoPorCliente[cliente.id] = { dou: contextoDOU, ibama: contextoIBAMA };
+    } catch (err) {
+      console.error(`Erro ao processar o cliente "${cliente.nome}": ${err.message}`);
+      relatorio.clientes.push({
+        clienteId: cliente.id,
+        clienteNome: cliente.nome,
+        resultados: [],
+        ibama: {},
+        erro: err.message,
+      });
+    }
   }
 
   await browser.close();

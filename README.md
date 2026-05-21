@@ -6,16 +6,23 @@ relevante (licencas, autuacoes, embargos, portarias).
 
 ## O que o sistema faz
 
-Todo dia util, para cada empresa cadastrada, o monitor:
+O monitor atende **multiplos clientes**: cada cliente tem sua propria lista
+de empresas e seus proprios destinatarios de e-mail. Todo dia util, para
+cada cliente ativo e cada empresa desse cliente, o monitor:
 
 1. **Busca no DOU** (Diario Oficial da Uniao) pelo CNPJ da empresa e filtra
    as publicacoes relevantes para a area ambiental.
 2. **Consulta os dados abertos do IBAMA** — autos de infracao e termos de
    embargo — cruzando pelo CNPJ.
-3. **Deduplica** os resultados: o que ja foi avisado antes nao e avisado de
-   novo (controle em banco SQLite).
-4. **Envia um e-mail** com tudo que e novo (via servico Resend).
-5. **Salva um relatorio** do dia em arquivo `relatorio-AAAA-MM-DD.json`.
+3. **Deduplica** os resultados por cliente: o que ja foi avisado antes nao e
+   avisado de novo (controle em banco SQLite, isolado por `cliente_id`).
+4. **Envia um e-mail por cliente**, contendo apenas os achados daquele
+   cliente, para os destinatarios daquele cliente (via servico Resend).
+5. **Salva um relatorio** do dia em arquivo `relatorio-AAAA-MM-DD.json`,
+   com um bloco por cliente.
+
+Uma falha ao processar um cliente nao interrompe os demais: o erro fica
+registrado no bloco daquele cliente e o monitor segue para o proximo.
 
 ## Requisitos
 
@@ -43,13 +50,23 @@ A configuracao fica em **dois arquivos**:
 
 ### `config.json` (vai para o git — sem segredos)
 
-- `empresas` — lista de empresas monitoradas, cada uma com `nome`, `cnpj` e
-  `ativa` (use `false` para pausar sem apagar).
+- `clientes` — lista de clientes monitorados. Cada cliente tem:
+  - `id` — identificador unico (usado para isolar a deduplicacao).
+  - `nome` — nome exibido nos relatorios e e-mails.
+  - `ativo` — `false` pausa o cliente sem apagar a configuracao.
+  - `empresas` — lista de empresas do cliente, cada uma com `nome`, `cnpj` e
+    `ativa` (use `false` para pausar uma empresa).
+  - `alerta.para` — destinatarios de e-mail **daquele** cliente.
 - `filtro` — tipos de publicacao e palavras-chave que definem o que e
-  relevante.
-- `agendamento` — horario da execucao automatica (formato cron).
-- `ibama` — quais fontes do IBAMA consultar e a janela de dias.
-- `alerta` — se o e-mail esta ativo, remetente e destinatarios.
+  relevante (global).
+- `agendamento` — horario da execucao automatica, formato cron (global).
+- `ibama` — quais fontes do IBAMA consultar e a janela de dias (global).
+- `alerta` — se o e-mail esta ativo e o remetente `de` (global). A chave da
+  API Resend fica em `config.local.json`.
+
+> Configuracoes no formato antigo (mono-cliente, com `empresas` no topo) sao
+> convertidas automaticamente para um unico cliente `default` — continuam
+> funcionando sem edicao.
 
 ### `config.local.json` (NAO vai para o git — guarda os segredos)
 
@@ -125,5 +142,8 @@ cada etapa concluida.
 
 - **Fase 2** (concluida) — coleta no DOU e IBAMA, deduplicacao, alerta por
   e-mail e agendamento.
-- **Fase 3** (em andamento) — robustez e testes, suporte a multiplos
-  clientes, novas fontes de dados e um painel web.
+- **Fase 3** (em andamento):
+  - Etapa 1 (concluida) — robustez e cobertura de testes automatizados.
+  - Etapa 2 (concluida) — **suporte a multiplos clientes**: cada cliente com
+    suas empresas, sua deduplicacao isolada e seu e-mail proprio.
+  - Etapas seguintes — novas fontes de dados e um painel web.
