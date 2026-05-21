@@ -112,6 +112,37 @@ Mantem um processo rodando que dispara o monitor sozinho no horario
 configurado em `config.json` (por padrao, 8h da manha em dias uteis).
 Deixe o terminal aberto; para parar, use `Ctrl+C`.
 
+### Painel web (interface de operador)
+
+```
+npm run painel
+```
+
+Sobe um servidor web local (por padrao na porta 3000) com o painel de
+administracao. Antes de usar, defina a senha do painel em `config.local.json`:
+
+```json
+{
+  "painel": { "senha": "sua-senha-aqui" }
+}
+```
+
+Acesse `http://localhost:3000` no navegador. O painel exige autenticacao com a
+senha configurada acima e oferece:
+
+- **Relatorios** — historico completo de `relatorio-*.json` com status de cada
+  execucao (erros, data, publicacoes novas). Clique em qualquer relatorio para
+  ver o detalhe por cliente e empresa: publicacoes do DOU, resultados do IBAMA
+  e dos diarios estaduais.
+- **Varredura manual** — botao "Iniciar Varredura" dispara o monitoramento
+  imediatamente (sem esperar o agendamento). O status ("em execucao",
+  "concluido", "erro") e atualizado em tempo real.
+- **Gerenciar empresas** — tela dedicada para adicionar ou remover empresas de
+  cada cliente, com validacao de CNPJ e UF. Alteracoes sao salvas em
+  `config.json` imediatamente.
+
+Para encerrar o painel, use `Ctrl+C` no terminal.
+
 ### Testes
 
 ```
@@ -139,6 +170,7 @@ arquivo tem uma responsabilidade clara:
 | `retry.js`         | Reexecuta operacoes de rede que falham (tolerancia a falhas) |
 | `log.js`           | Espelha as mensagens do console para arquivos em `logs/`     |
 | `cron.js`          | Agendador da execucao automatica                            |
+| `painel.js`        | Servidor web do painel de operador (Express + sessao)       |
 
 O ponto de entrada e `monitor.js`. Falhas de rede sao tratadas de forma
 resiliente: a busca do DOU e retentada automaticamente, e um erro em uma

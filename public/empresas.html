@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel — Gerenciar Empresas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="topbar-title">Monitor de Licenciamento</span>
+    <nav class="topbar-nav">
+      <a href="/">Painel</a>
+      <form method="post" action="/logout" class="inline-form">
+        <button type="submit" class="btn-sair">Sair</button>
+      </form>
+    </nav>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Empresas Monitoradas</h2>
+      <div id="clientes"><p>Carregando...</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Adicionar Empresa</h2>
+      <form id="form-add" class="form-add">
+        <div class="form-row">
+          <label for="add-clienteid">Cliente</label>
+          <select id="add-clienteid" required></select>
+        </div>
+        <div class="form-row">
+          <label for="add-nome">Nome da empresa</label>
+          <input type="text" id="add-nome" placeholder="Nome da empresa" required maxlength="200">
+        </div>
+        <div class="form-row">
+          <label for="add-cnpj">CNPJ</label>
+          <input type="text" id="add-cnpj" placeholder="00.000.000/0000-00" required maxlength="18">
+        </div>
+        <div class="form-row">
+          <label for="add-uf">UF <small>(opcional)</small></label>
+          <input type="text" id="add-uf" placeholder="SP" maxlength="2">
+        </div>
+        <button type="submit" class="btn-primary">Adicionar</button>
+      </form>
+      <div id="msg-add"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

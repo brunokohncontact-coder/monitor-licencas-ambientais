@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Painel — Monitor de Licenciamento</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="topbar-title">Monitor de Licenciamento</span>
+    <nav class="topbar-nav">
+      <a href="/empresas.html">Gerenciar Empresas</a>
+      <form method="post" action="/logout" class="inline-form">
+        <button type="submit" class="btn-sair">Sair</button>
+      </form>
+    </nav>
+  </header>
+
+  <main>
+    <section id="status" class="card"></section>
+
+    <section class="card varredura-section">
+      <h2>Varredura Manual</h2>
+      <button id="btn-varredura" class="btn-primary">Iniciar Varredura</button>
+      <span id="status-varredura"></span>
+    </section>
+
+    <section class="card">
+      <h2>Histórico de Relatórios</h2>
+      <div id="lista-relatorios"><p>Carregando...</p></div>
+    </section>
+
+    <section id="detalhe-relatorio" class="card detalhe-overlay" hidden>
+      <div class="detalhe-header">
+        <h2 id="detalhe-titulo">Relatório</h2>
+        <button id="btn-fechar" class="btn-fechar" title="Fechar">✕</button>
+      </div>
+      <div id="conteudo-relatorio"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
