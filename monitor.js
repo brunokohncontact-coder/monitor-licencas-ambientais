@@ -6,11 +6,12 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 const { buscarDOU, dataDeHoje } = require('./dou');
-const { enviarAlerta } = require('./alerta');
+const { enviarAlerta, enviarAlertaDeFalha, enviarAlertaDeFalhaFatal } = require('./alerta');
 const { inicializarDB, filtrarNaoAlertadas, marcarComoAlertadas } = require('./dedup');
 const { buscarFonte: buscarFonteIBAMA, normalizarCNPJ } = require('./ibama');
 const { DIARIOS, ufsParaVarrer } = require('./diario-estadual');
 const { carregarConfig } = require('./config-loader');
+const { calcularSaude } = require('./saude');
 const logger = require('./log');
 
 // Verifica se uma publicacao e relevante para monitoramento ambiental.
@@ -160,6 +161,13 @@ function imprimirRelatorio(relatorio) {
   console.log(linha);
 }
 
+// Resolve o destino do aviso ao operador a partir da config. Centraliza o
+// fallback gracioso: se alerta.operador estiver ausente/vazio, devolve [].
+function destinatariosOperador(config) {
+  const cfgAlerta = (config && config.alerta) || {};
+  return Array.isArray(cfgAlerta.operador) ? cfgAlerta.operador : [];
+}
+
 async function executarMonitor(opcoes = {}) {
   const arquivoLog = logger.iniciar();
   try {
@@ -167,6 +175,30 @@ async function executarMonitor(opcoes = {}) {
   } catch (err) {
     // Garante que o erro va para o log antes de fechar o stream.
     console.error('Erro fatal no monitor:', err);
+
+    // Falha fatal: o monitor nem produziu o relatorio. Antes de relancar,
+    // TENTA avisar o operador (best-effort) — se a propria falha for falta de
+    // internet, o e-mail nao sai e tudo bem, o erro ja esta no log. O envio
+    // jamais pode mascarar a excecao original: ela e sempre relancada para a
+    // Etapa 2 poder sair com codigo 1.
+    try {
+      // A config pode nao ter sido carregada (a falha pode ter sido a propria
+      // leitura da config); por isso a carga vai num try/catch proprio.
+      let config = opcoes.config;
+      if (!config) {
+        config = carregarConfig();
+      }
+      const cfgAlerta = config.alerta || {};
+      await enviarAlertaDeFalhaFatal(err, {
+        apiKey: cfgAlerta.resendApiKey,
+        de: cfgAlerta.de,
+        para: destinatariosOperador(config),
+        data: opcoes.data || dataDeHoje() || new Date().toISOString().slice(0, 10),
+      });
+    } catch (errAviso) {
+      console.error('Nao foi possivel avisar o operador da falha fatal:', errAviso.message);
+    }
+
     throw err;
   } finally {
     logger.fechar();
@@ -221,14 +253,22 @@ async function processarDOUDoCliente(browser, empresasAtivas, hoje, db, clienteI
       `  Encontradas: ${resultado.publicacoes.length} | Relevantes: ${relevantesTodos.length} | Ja alertadas: ${jaAlertadas.length} | Novas: ${novas.length}`
     );
 
-    resultados.push({
+    // Propaga a sinalizacao de DOU parcial (perda de paginas). buscarDOU so
+    // inclui esses campos quando houve perda; o auto-diagnostico (saude) os
+    // usa para distinguir "busca incompleta" de "busca vazia".
+    const bloco = {
       empresa: empresa.nome,
       cnpj: empresa.cnpj,
       totalEncontradas: resultado.publicacoes.length,
       relevantes: novas,
       jaAlertadas,
       todas: resultado.publicacoes,
-    });
+    };
+    if (resultado.parcial) {
+      bloco.parcial = true;
+      bloco.aviso = resultado.aviso;
+    }
+    resultados.push(bloco);
   }
 
   return resultados;
@@ -446,6 +486,22 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
       }
     }
 
+    // Auto-diagnostico: agrega os campos `erro` ja espalhados pelo relatorio
+    // num resumo de saude (status geral + contagem por fonte + lista de
+    // falhas). E um campo ADICIONAL no topo do relatorio — relatorios antigos
+    // sem `saude` continuam validos.
+    relatorio.saude = calcularSaude(relatorio);
+    if (relatorio.saude.status === 'ok') {
+      console.log('\nSaude da execucao: ok — todas as fontes responderam.');
+    } else {
+      console.warn(
+        `\nSaude da execucao: parcial — ${relatorio.saude.falhas.length} falha(s) detectada(s).`
+      );
+      for (const f of relatorio.saude.falhas) {
+        console.warn(`  - ${f}`);
+      }
+    }
+
     imprimirRelatorio(relatorio);
 
     // Salvar relatorio em arquivo JSON (nome em data ISO, ordenavel).
@@ -456,6 +512,24 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
     } catch (err) {
       console.error(`Erro ao salvar relatorio: ${err.message}`);
       throw err;
+    }
+
+    // Aviso ao operador: se a execucao teve problemas, envia UM e-mail ao
+    // operador (config.alerta.operador) com a lista de falhas. E separado do
+    // e-mail aos clientes (enviarAlerta) e nao deve derrubar a execucao —
+    // por isso vai num try/catch proprio.
+    if (relatorio.saude.status !== 'ok') {
+      try {
+        const cfgAlerta = config.alerta || {};
+        await enviarAlertaDeFalha(relatorio.saude, {
+          apiKey: cfgAlerta.resendApiKey,
+          de: cfgAlerta.de,
+          para: destinatariosOperador(config),
+          data: relatorio.data,
+        });
+      } catch (err) {
+        console.error(`Erro ao avisar o operador sobre a execucao parcial: ${err.message}`);
+      }
     }
 
     // Enviar um e-mail por cliente. So marcamos como alertadas APOS o envio

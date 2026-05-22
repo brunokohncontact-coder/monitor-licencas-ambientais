@@ -52,14 +52,55 @@ async function carregarRelatorios() {
   }
 }
 
+// Monta o item "Saúde da execução" do status. Relatórios da Fase 4 trazem
+// status.saudeUltimoRelatorio; relatórios legados (sem o campo saude) vêm com
+// null — neste caso cai no comportamento antigo, mostrando só a contagem de
+// erros do último relatório.
+function renderizarSaude(status) {
+  const saude = status.saudeUltimoRelatorio;
+
+  if (!saude || typeof saude !== 'object') {
+    const erros = status.errosUltimoRelatorio;
+    const badgeErro = erros > 0
+      ? '<span class="badge aviso">' + esc(erros) + ' erro(s)</span>'
+      : '<span class="badge ok">sem erros</span>';
+    return '<div class="status-item"><div class="label">Erros no último</div>' +
+      '<div class="value">' + badgeErro + '</div></div>';
+  }
+
+  const ehOk = saude.status === 'ok';
+  const badgeGeral = ehOk
+    ? '<span class="badge ok">ok</span>'
+    : '<span class="badge aviso">parcial</span>';
+
+  const f = saude.fontes || {};
+  const dou = f.dou || { ok: 0, parcial: 0, falha: 0 };
+  const ibama = f.ibama || { ok: 0, falha: 0 };
+  const diarios = f.diarios || { ok: 0, falha: 0 };
+  const detalheFontes =
+    '<div class="saude-fontes">' +
+      'DOU: ' + esc(dou.ok) + ' ok, ' + esc(dou.parcial) + ' parcial, ' + esc(dou.falha) + ' falha' +
+      ' · IBAMA: ' + esc(ibama.ok) + ' ok, ' + esc(ibama.falha) + ' falha' +
+      ' · Diários: ' + esc(diarios.ok) + ' ok, ' + esc(diarios.falha) + ' falha' +
+    '</div>';
+
+  const falhas = Array.isArray(saude.falhas) ? saude.falhas : [];
+  const listaFalhas = falhas.length > 0
+    ? '<ul class="saude-falhas">' +
+        falhas.map(function (txt) { return '<li>' + esc(txt) + '</li>'; }).join('') +
+      '</ul>'
+    : '';
+
+  return '<div class="status-item status-saude"><div class="label">Saúde da execução</div>' +
+    '<div class="value">' + badgeGeral + '</div>' +
+    detalheFontes +
+    listaFalhas +
+    '</div>';
+}
+
 function renderizarStatus(status) {
   const el = document.getElementById('status');
   if (!status) { el.innerHTML = ''; return; }
-
-  const erros = status.errosUltimoRelatorio;
-  const badgeErro = erros > 0
-    ? '<span class="badge aviso">' + esc(erros) + ' erro(s)</span>'
-    : '<span class="badge ok">sem erros</span>';
 
   el.innerHTML =
     '<h2>Status do Sistema</h2>' +
@@ -70,8 +111,7 @@ function renderizarStatus(status) {
         '<div class="value">' + formatarDataHora(status.ultimaExecucao) + '</div></div>' +
       '<div class="status-item"><div class="label">Total de relatórios</div>' +
         '<div class="value">' + esc(status.totalRelatorios) + '</div></div>' +
-      '<div class="status-item"><div class="label">Erros no último</div>' +
-        '<div class="value">' + badgeErro + '</div></div>' +
+      renderizarSaude(status) +
     '</div>';
 }
 

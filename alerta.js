@@ -192,4 +192,190 @@ async function enviarAlerta(relatorio, opcoes = {}) {
   }
 }
 
-module.exports = { enviarAlerta, gerarHtml, contarAlertas };
+// ---------------------------------------------------------------------------
+// Aviso de falha ao operador (Fase 4, Etapa 1)
+// ---------------------------------------------------------------------------
+// Diferente do enviarAlerta acima: aquele vai aos CLIENTES e so sai quando ha
+// publicacoes novas. Este vai ao OPERADOR (dono do sistema) e sai quando a
+// propria execucao teve problemas — uma fonte falhou, perdeu paginas, ou o
+// monitor nem rodou. E o mecanismo de "o monitor sabe e avisa quando ele
+// mesmo falha".
+
+// Gera o corpo HTML do e-mail de aviso de falha ao operador.
+// Recebe o objeto `saude` (ver saude.js) e a `data` da execucao.
+function gerarHtmlFalha(saude, data) {
+  const s = saude && typeof saude === 'object' ? saude : { status: 'parcial', fontes: {}, falhas: [] };
+  const falhas = Array.isArray(s.falhas) ? s.falhas : [];
+  const f = s.fontes || {};
+  const dou = f.dou || { ok: 0, parcial: 0, falha: 0 };
+  const ibama = f.ibama || { ok: 0, falha: 0 };
+  const diarios = f.diarios || { ok: 0, falha: 0 };
+
+  const itensFalha = falhas.length
+    ? falhas
+        .map(
+          (txt) => `
+          <li style="margin:6px 0; font-size:13px; color:#333;">${txt}</li>`
+        )
+        .join('')
+    : '<li style="margin:6px 0; font-size:13px; color:#888;">Sem detalhes de falha.</li>';
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;color:#333;">
+      <div style="background:#c0392b;color:white;padding:20px;border-radius:8px 8px 0 0;">
+        <h2 style="margin:0;">&#9888; Monitor de Licencas Ambientais</h2>
+        <div style="font-size:14px;opacity:0.9;margin-top:4px;">Aviso de falha &mdash; ${data || ''}</div>
+      </div>
+
+      <div style="background:white;border:1px solid #ddd;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+        <div style="background:#fdf2f2;border:1px solid #c0392b;padding:12px;border-radius:6px;margin-bottom:20px;">
+          <strong style="color:#c0392b;">A execucao terminou com problemas.</strong>
+          Algumas fontes podem nao ter sido verificadas — confira abaixo.
+        </div>
+
+        <h3 style="margin:0 0 8px;color:#2c3e50;">Resumo por fonte</h3>
+        <ul style="font-size:13px;color:#555;line-height:1.6;">
+          <li>DOU &mdash; ok: ${dou.ok}, parcial: ${dou.parcial}, falha: ${dou.falha}</li>
+          <li>IBAMA &mdash; ok: ${ibama.ok}, falha: ${ibama.falha}</li>
+          <li>Diarios estaduais &mdash; ok: ${diarios.ok}, falha: ${diarios.falha}</li>
+        </ul>
+
+        <h3 style="margin:16px 0 8px;color:#2c3e50;">Falhas detectadas</h3>
+        <ul style="padding-left:18px;margin:0;">${itensFalha}</ul>
+
+        <div style="font-size:11px;color:#aaa;margin-top:24px;padding-top:16px;border-top:1px solid #eee;">
+          Aviso automatico do Monitor de Licencas Ambientais
+        </div>
+      </div>
+    </body>
+    </html>`;
+}
+
+// Envia ao operador um e-mail de aviso quando a execucao teve problemas.
+//
+// saude: objeto produzido por saude.js:calcularSaude.
+// opcoes: { apiKey, de, para, data }
+//   - para: array de e-mails do operador (config.alerta.operador);
+//   - data: a data da execucao (so para o assunto/corpo).
+//
+// So envia quando saude.status !== "ok". Quando nao ha apiKey/de/para,
+// PULA o envio com um aviso no console — mesmo padrao do enviarAlerta normal,
+// para que um operador nao configurado nunca derrube a execucao.
+// Retorna true se enviou, false se pulou ou falhou.
+async function enviarAlertaDeFalha(saude, opcoes = {}) {
+  const s = saude && typeof saude === 'object' ? saude : {};
+
+  if (s.status === 'ok') {
+    // Execucao saudavel — nada a avisar.
+    return false;
+  }
+
+  const { apiKey, de, para, data } = opcoes;
+
+  if (!apiKey || !de || !para || para.length === 0) {
+    console.log(
+      'Aviso ao operador nao configurado (falta apiKey, de ou alerta.operador). Pulando envio.'
+    );
+    return false;
+  }
+
+  const resend = new Resend(apiKey);
+  const assunto = `⚠ [Monitor Ambiental] Execucao com problemas - ${data || ''}`;
+  const html = gerarHtmlFalha(s, data);
+
+  try {
+    const { data: resposta, error } = await resend.emails.send({
+      from: de,
+      to: para,
+      subject: assunto,
+      html,
+    });
+
+    if (error) {
+      console.error('Erro ao enviar aviso de falha ao operador:', error.message);
+      return false;
+    }
+
+    console.log(`Aviso de falha enviado ao operador. ID: ${resposta.id}`);
+    console.log(`  Para: ${para.join(', ')}`);
+    return true;
+  } catch (err) {
+    console.error('Excecao ao enviar aviso de falha ao operador:', err.message);
+    return false;
+  }
+}
+
+// Envia ao operador um e-mail quando o monitor NEM RODOU (falha fatal antes
+// de produzir o relatorio — ex.: navegador nao abre, config invalida).
+//
+// opcoes: { apiKey, de, para, data }. erro: o objeto Error capturado.
+//
+// E *best-effort*: se a propria falha for falta de internet, o e-mail nao sai
+// e tudo bem — o problema ja esta no log. Nunca lanca excecao; no maximo
+// retorna false. Quando o operador nao esta configurado, PULA com aviso.
+async function enviarAlertaDeFalhaFatal(erro, opcoes = {}) {
+  const { apiKey, de, para, data } = opcoes;
+  const mensagemErro = erro && erro.message ? erro.message : String(erro);
+
+  if (!apiKey || !de || !para || para.length === 0) {
+    console.log(
+      'Aviso de falha fatal nao configurado (falta apiKey, de ou alerta.operador). Pulando envio.'
+    );
+    return false;
+  }
+
+  const resend = new Resend(apiKey);
+  const assunto = `⚠ [Monitor Ambiental] O monitor nao rodou - ${data || ''}`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <body style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;color:#333;">
+      <div style="background:#c0392b;color:white;padding:20px;border-radius:8px 8px 0 0;">
+        <h2 style="margin:0;">&#9888; Monitor de Licencas Ambientais</h2>
+        <div style="font-size:14px;opacity:0.9;margin-top:4px;">O monitor nao rodou &mdash; ${data || ''}</div>
+      </div>
+      <div style="background:white;border:1px solid #ddd;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
+        <div style="background:#fdf2f2;border:1px solid #c0392b;padding:12px;border-radius:6px;margin-bottom:20px;">
+          <strong style="color:#c0392b;">A execucao falhou antes de produzir o relatorio.</strong>
+          Nenhuma fonte foi verificada nesta data.
+        </div>
+        <h3 style="margin:0 0 8px;color:#2c3e50;">Erro</h3>
+        <pre style="font-size:13px;color:#333;background:#f8f9fa;padding:12px;border-radius:4px;white-space:pre-wrap;">${mensagemErro}</pre>
+        <div style="font-size:11px;color:#aaa;margin-top:24px;padding-top:16px;border-top:1px solid #eee;">
+          Aviso automatico do Monitor de Licencas Ambientais
+        </div>
+      </div>
+    </body>
+    </html>`;
+
+  try {
+    const { data: resposta, error } = await resend.emails.send({
+      from: de,
+      to: para,
+      subject: assunto,
+      html,
+    });
+
+    if (error) {
+      console.error('Erro ao enviar aviso de falha fatal ao operador:', error.message);
+      return false;
+    }
+
+    console.log(`Aviso de falha fatal enviado ao operador. ID: ${resposta.id}`);
+    return true;
+  } catch (err) {
+    console.error('Excecao ao enviar aviso de falha fatal ao operador:', err.message);
+    return false;
+  }
+}
+
+module.exports = {
+  enviarAlerta,
+  gerarHtml,
+  contarAlertas,
+  enviarAlertaDeFalha,
+  enviarAlertaDeFalhaFatal,
+  gerarHtmlFalha,
+};

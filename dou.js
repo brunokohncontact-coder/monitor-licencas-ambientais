@@ -171,6 +171,13 @@ async function buscarDOU(browser, termo, opcoes = {}) {
   const todasPublicacoes = [...resultadoAtual.publicacoes];
   let paginaAtual = 1;
 
+  // Sinaliza perda de paginas. Quando uma pagina seguinte falha apos todas as
+  // tentativas, a busca segue com o que ja coletou — mas o resultado fica
+  // INCOMPLETO. parcial/aviso comunicam isso ao chamador (monitor.js) para que
+  // o auto-diagnostico (saude) saiba que a busca foi parcial, nao "vazia".
+  let parcial = false;
+  let avisoParcial = null;
+
   while (paginaAtual < Math.min(resultadoAtual.totalPages, maxPaginas)) {
     const proxPag = paginaAtual + 1;
     const urlProx = buildProximaPaginaUrl(termo, resultadoAtual, proxPag);
@@ -185,10 +192,11 @@ async function buscarDOU(browser, termo, opcoes = {}) {
         aoFalhar: avisarRetentativa,
       });
     } catch (erro) {
-      console.warn(
-        `  Pagina ${proxPag} do DOU falhou apos ${tentativas} tentativas: ` +
-          `${erro.message}. Seguindo com ${todasPublicacoes.length} publicacoes ja coletadas.`
-      );
+      avisoParcial =
+        `Pagina ${proxPag} do DOU falhou apos ${tentativas} tentativas: ` +
+        `${erro.message}. Seguindo com ${todasPublicacoes.length} publicacoes ja coletadas.`;
+      console.warn(`  ${avisoParcial}`);
+      parcial = true;
       break;
     }
 
@@ -202,8 +210,11 @@ async function buscarDOU(browser, termo, opcoes = {}) {
 
   // Normalizar dados antes de retornar. orgaoCategoria classifica o orgao
   // emissor (ex: 'ICMBio') a partir do shape ja normalizado — ver icmbio.js.
+  // parcial/aviso so aparecem quando houve perda de paginas; adicionar campos
+  // opcionais NAO quebra chamadores que so leem `publicacoes`.
   return {
     totalResultados: resultadoAtual.totalResultados,
+    ...(parcial ? { parcial: true, aviso: avisoParcial } : {}),
     publicacoes: todasPublicacoes.map((pub) => {
       const normalizada = {
         tipo: pub.artType || '',

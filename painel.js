@@ -142,6 +142,18 @@ function contarErrosRelatorio(rel) {
   return total;
 }
 
+// Extrai o resumo de saude de um relatorio para exibicao no painel.
+// Relatorio da Fase 4 traz o campo `saude` pronto (ver saude.js); um
+// relatorio LEGADO (Fase 2/3) nao tem esse campo — neste caso devolve null,
+// e o painel cai graciosamente no comportamento antigo (errosUltimoRelatorio).
+// Nunca lanca excecao: um relatorio antigo nunca pode derrubar a tela.
+function saudeDoRelatorio(rel) {
+  if (!rel || typeof rel !== 'object') return null;
+  const s = rel.saude;
+  if (!s || typeof s !== 'object') return null;
+  return s;
+}
+
 // ---------------------------------------------------------------------------
 // Acesso a arquivos
 // ---------------------------------------------------------------------------
@@ -175,12 +187,14 @@ function listarRelatorios() {
     .sort()
     .reverse()
     .map((nome) => {
-      const meta = { nome, data: null, executadoEm: null, erro: null };
+      const meta = { nome, data: null, executadoEm: null, erro: null, saude: null };
       try {
         const conteudo = JSON.parse(fs.readFileSync(path.join(RAIZ, nome), 'utf-8'));
         meta.data = conteudo.data || null;
         meta.executadoEm = conteudo.executadoEm || null;
         meta.erros = contarErrosRelatorio(conteudo);
+        // saude so existe nos relatorios da Fase 4; nos antigos fica null.
+        meta.saude = saudeDoRelatorio(conteudo);
       } catch (err) {
         meta.erro = 'Arquivo ilegivel: ' + err.message;
       }
@@ -189,7 +203,9 @@ function listarRelatorios() {
 }
 
 // Monta o status do sistema: ultimo run, total de relatorios, erros do ultimo
-// relatorio e o estado da varredura manual em andamento.
+// relatorio, a saude da ultima execucao e o estado da varredura manual.
+// saudeUltimoRelatorio e null para relatorios legados sem o campo `saude` —
+// o frontend trata esse caso caindo no comportamento antigo.
 function statusSistema() {
   const relatorios = listarRelatorios();
   const ultimo = relatorios[0] || null;
@@ -198,6 +214,7 @@ function statusSistema() {
     ultimoRelatorio: ultimo ? ultimo.nome : null,
     ultimaExecucao: ultimo ? ultimo.executadoEm : null,
     errosUltimoRelatorio: ultimo && typeof ultimo.erros === 'number' ? ultimo.erros : 0,
+    saudeUltimoRelatorio: ultimo ? ultimo.saude || null : null,
     varredura: estadoVarredura,
   };
 }
@@ -582,8 +599,10 @@ module.exports = {
   validarNome,
   validarUF,
   contarErrosRelatorio,
+  saudeDoRelatorio,
   exigirSessao,
   listarRelatorios,
+  statusSistema,
   criarApp,
   iniciar,
 };

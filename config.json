@@ -63,7 +63,8 @@
   },
   "alerta": {
     "ativo": true,
-    "de": "onboarding@resend.dev"
+    "de": "onboarding@resend.dev",
+    "operador": []
   },
   "ibama": {
     "ativo": true,

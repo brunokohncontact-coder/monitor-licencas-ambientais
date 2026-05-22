@@ -270,6 +270,29 @@ tr:hover td { background: #fafafa; }
   margin-top: 2px;
 }
 
+/* Item de saude da execucao — pode ocupar a linha inteira por causa
+   da lista de falhas, por isso o grid-column: 1 / -1. */
+.status-saude {
+  grid-column: 1 / -1;
+}
+
+.saude-fontes {
+  font-size: 12px;
+  color: #555;
+  margin-top: 6px;
+}
+
+.saude-falhas {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+  color: #922b21;
+}
+
+.saude-falhas li {
+  margin-bottom: 3px;
+}
+
 /* ── Varredura ──────────────────────────────────────────── */
 
 .varredura-section {
