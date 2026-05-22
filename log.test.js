@@ -81,3 +81,20 @@ test('limparLogsAntigos: nao lanca excecao quando o diretorio nao existe', () =>
   // O diretorio nunca foi criado — a funcao deve retornar silenciosamente.
   assert.doesNotThrow(() => limparLogsAntigos(30, tmpDir));
 });
+
+test('limparLogsAntigos: deleta arquivo antigo, preserva recente na mesma execucao', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-log-test-'));
+  try {
+    const old = path.join(dir, '2020-01-01.log');
+    const recent = path.join(dir, '2099-12-31.log');
+    fs.writeFileSync(old, 'conteudo antigo');
+    fs.writeFileSync(recent, 'conteudo recente');
+    const past = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
+    fs.utimesSync(old, past, past);
+    limparLogsAntigos(30, dir);
+    assert.ok(!fs.existsSync(old), 'arquivo antigo deve ser deletado');
+    assert.ok(fs.existsSync(recent), 'arquivo recente deve ser mantido');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
