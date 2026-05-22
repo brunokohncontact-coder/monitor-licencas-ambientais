@@ -1,84 +1,58 @@
 {
   "$schema": "review-checklist-schema-v2",
   "task": "TASK0",
-  "generated": "2026-05-21T00:00:00.000Z",
+  "generated": "2026-05-22T04:15:00Z",
   "items": [
     {
       "id": "RC1",
-      "file": "retry.js",
-      "lines": [14, 36],
-      "type": "exists",
-      "description": "O loop em comRetentativa (linhas 20-33) nao espera apos a ultima tentativa (linha 25: tentativa < tentativas). Confirmar que o comportamento esta correto para evitar espera desnecessaria quando todas as tentativas sao esgotadas.",
+      "file": "config.json",
+      "lines": [64, 67],
+      "type": "verified",
+      "description": "Does the alerta section correctly have operador as an empty array at line 67?",
       "reviewed": true,
       "category": "completeness",
       "context": {
-        "action": "Verificacao do helper comRetentativa com backoff exponencial",
-        "why": "Garantir que a ultima tentativa nao gera espera desnecessaria antes de relancar o erro"
+        "action": "Verified existing alerta.operador field",
+        "why": "Fase 4 requirement R3b: alerta.operador must be an array for future use by enviarAlertaDeFalha function"
       }
     },
     {
       "id": "RC2",
-      "file": "retry.js",
-      "lines": [16, 28],
-      "type": "exists",
-      "description": "A guarda 'if (espera > 0)' na linha 28 permite usar esperaBaseMs=0 nos testes. Confirmar que esperaBaseMs=0 com tentativas=1 retorna imediatamente sem chamar setTimeout.",
+      "file": "config.json",
+      "lines": [87, 89],
+      "type": "verified",
+      "description": "Does the manutencao section correctly have logsDiasReter as a number (30) at line 88?",
       "reviewed": true,
-      "category": "testing",
+      "category": "completeness",
       "context": {
-        "action": "Verificacao do comportamento com esperaBaseMs=0 (usado nos testes da fase 3)",
-        "why": "Permitir testes rapidos sem esperas reais de rede"
+        "action": "Verified existing manutencao.logsDiasReter field",
+        "why": "Fase 4 requirement R8: manutencao.logsDiasReter must be a number for log retention policy in limparLogsAntigos"
       }
     },
     {
       "id": "RC3",
-      "file": "dou.js",
-      "lines": [96, 103],
-      "type": "exists",
-      "description": "A funcao carregarComExtracao (linhas 96-103) lanca erro apenas quando extrairPagina retorna null (timeout/falha real), nao quando retorna zero resultados. Confirmar que a condicao if (!resultado) na linha 99 distingue corretamente falha real de resultado vazio.",
+      "file": "config.json",
+      "lines": [1, 91],
+      "type": "verified",
+      "description": "Is config.json valid JSON and does it maintain backward compatibility with no breaking changes to existing sections (clientes, filtro, agendamento, ibama, diariosEstaduais, painel)?",
       "reviewed": true,
-      "category": "error-handling",
+      "category": "compatibility",
       "context": {
-        "action": "Verificacao de que contagem zero de resultados nao dispara retry",
-        "why": "O portal DOU retorna contagens diferentes para o mesmo termo - isso nao e erro"
+        "action": "Verified JSON syntax and section integrity",
+        "why": "Ensure config.json changes are additive only and do not break existing code that reads other sections"
       }
     },
     {
       "id": "RC4",
-      "file": "dou.js",
-      "lines": [152, 163, 180, 192],
-      "type": "exists",
-      "description": "comRetentativa envolve apenas carregarComExtracao nas linhas 153 e 181. Confirmar que nenhuma comparacao de contagens de resultados ocorre dentro desses blocos retry.",
+      "file": "config.json",
+      "lines": [1, 91],
+      "type": "verified",
+      "description": "Are there any secret values (resendApiKey, senha, API keys) stored in config.json instead of config.local.json?",
       "reviewed": true,
-      "category": "completeness",
+      "category": "security",
       "context": {
-        "action": "Verificacao de que retry so envolve operacoes de rede/extracao",
-        "why": "Guardrail: variacao de contagem do DOU nao deve disparar retry"
-      }
-    },
-    {
-      "id": "RC5",
-      "file": "monitor.js",
-      "lines": [151, 168],
-      "type": "exists",
-      "description": "O try/catch por empresa em processarDOUDoCliente (linhas 151-168) registra resultado.erro e usa continue para continuar o laco. Confirmar que a execucao realmente continua para a proxima empresa e nao para completamente.",
-      "reviewed": true,
-      "category": "error-handling",
-      "context": {
-        "action": "Verificacao do isolamento de falha por empresa no DOU",
-        "why": "Falha de uma empresa nao pode derrubar as demais nem o bloco IBAMA"
-      }
-    },
-    {
-      "id": "RC6",
-      "file": "monitor.js",
-      "lines": [157, 166],
-      "type": "exists",
-      "description": "A mensagem de erro na linha 157 usa console.error em portugues sem acento. Confirmar que err.message (que vem do throw em buscarDOU) tambem esta em portugues.",
-      "reviewed": true,
-      "category": "data-flow",
-      "context": {
-        "action": "Verificacao de que mensagens de erro em cascata (dou.js -> monitor.js) estao em portugues",
-        "why": "Criterio de aceitacao: erros impressos em portugues legivel"
+        "action": "Verified no secrets in config.json",
+        "why": "Security guardrail: secrets must never be stored in git-tracked config.json - they belong in config.local.json"
       }
     }
   ]

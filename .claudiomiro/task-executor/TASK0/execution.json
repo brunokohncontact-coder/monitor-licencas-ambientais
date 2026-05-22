@@ -4,12 +4,12 @@
   "task": "TASK0",
   "title": "BLUEPRINT: TASK0",
   "status": "completed",
-  "started": "2026-05-21T03:01:35.541Z",
+  "started": "2026-05-22T04:10:10.379Z",
   "attempts": 1,
   "currentPhase": {
-    "id": 5,
+    "id": 3,
     "name": "Validation",
-    "lastAction": "Completed"
+    "lastAction": "All success criteria verified"
   },
   "phases": [
     {
@@ -18,128 +18,84 @@
       "status": "completed",
       "items": [
         {
-          "description": "Verificar estrutura do projeto: ls, test -f dou.js monitor.js",
-          "source": "BLUEPRINT.md §4 Phase 1 Pre-check",
+          "description": "Verify config.json exists",
+          "source": "BLUEPRINT.md §4 Phase 1 Step 1",
           "completed": true,
-          "evidence": "monitor.js e dou.js confirmados na raiz do projeto"
+          "evidence": "Verified: config.json exists"
         },
         {
-          "description": "Verificar Node 20+ e node_modules/playwright instalados",
-          "source": "BLUEPRINT.md §4 Phase 1 Pre-check",
+          "description": "Verify config.json is valid JSON",
+          "source": "BLUEPRINT.md §4 Phase 1 Step 1",
           "completed": true,
-          "evidence": "Node 20+ OK; node_modules/playwright presente"
+          "evidence": "node -e \"require('./config.json')\" returned no error"
         },
         {
-          "description": "Ler AI_PROMPT.md secao Environment & Codebase, Etapa 1 e comportamento do portal DOU",
-          "source": "BLUEPRINT.md §4 Phase 1 TODO Step 1",
+          "description": "Read AI_PROMPT.md acceptance criteria R3b (L166) and R8 (L198)",
+          "source": "BLUEPRINT.md §4 Phase 1 Step 2",
           "completed": true,
-          "evidence": "AI_PROMPT.md referenciado: tech stack CommonJS puro, comportamento DOU (L83-88), criterios Etapa 1 (L116-126)"
-        },
-        {
-          "description": "Ler retry.js, dou.js e monitor.js:processarIBAMADoCliente como modelo de try/catch",
-          "source": "BLUEPRINT.md §4 Phase 1 TODO Step 2",
-          "completed": true,
-          "evidence": "retry.js exporta comRetentativa com backoff exponencial (Math.pow); dou.js usa comRetentativa em 2 pontos; monitor.js:processarDOUDoCliente ja tem try/catch por empresa com continue"
+          "evidence": "BLUEPRINT.md directly specifies the fields: alerta.operador (array) and manutencao.logsDiasReter (number)"
         }
       ]
     },
     {
       "id": 2,
-      "name": "Core Implementation",
+      "name": "Verification / Gap-Closure",
       "status": "completed",
       "items": [
         {
-          "description": "Garantir retry.js: comRetentativa(fn, opcoes) com tentativas=3, esperaBaseMs=2000, backoff exponencial, callback aoFalhar, relanca ultimo erro",
-          "source": "BLUEPRINT.md §4 Phase 2 TODO Step 1",
+          "description": "Confirm alerta section has operador as an array. If missing, add \"operador\": [] inside the alerta object",
+          "source": "BLUEPRINT.md §4 Phase 2 Step 1",
           "completed": true,
-          "evidence": "retry.js:14-38 implementa exatamente o padrao: Math.pow(2, tentativa-1), aoFalhar callback, throw ultimoErro. Verificado: node -e 'require('./retry').comRetentativa' => OK"
+          "evidence": "config.json line 67: \"operador\": [] already present and is Array"
         },
         {
-          "description": "Em dou.js, envolver carregarComExtracao com comRetentativa — apenas operacao de rede, nunca comparacao de contagens",
-          "source": "BLUEPRINT.md §4 Phase 2 TODO Step 2",
+          "description": "Confirm manutencao section exists with logsDiasReter as a number. If missing, add \"manutencao\": { \"logsDiasReter\": 30 }",
+          "source": "BLUEPRINT.md §4 Phase 2 Step 2",
           "completed": true,
-          "evidence": "dou.js:5 importa comRetentativa; dou.js:153 wraps pagina 1; dou.js:181 wraps paginas seguintes. Contagens comparadas apenas apos o await (linhas 165, 194). grep -n comRetentativa dou.js => 3 hits"
+          "evidence": "config.json line 88: \"logsDiasReter\": 30 already present and is number"
         },
         {
-          "description": "Em monitor.js:processarDOUDoCliente, try/catch por empresa: no erro, gravar resultado.erro e continue",
-          "source": "BLUEPRINT.md §4 Phase 2 TODO Step 3",
+          "description": "Confirm no secret values are present in config.json",
+          "source": "BLUEPRINT.md §4 Phase 2 Step 3",
           "completed": true,
-          "evidence": "monitor.js:151-168 tem try/catch completo: console.error em portugues, push com erro:err.message, continue para proxima empresa"
-        },
-        {
-          "description": "Garantir mensagens de erro em portugues sem acento no console",
-          "source": "BLUEPRINT.md §4 Phase 2 TODO Step 4",
-          "completed": true,
-          "evidence": "Todas as mensagens de erro adicionadas estao em portugues sem acento: 'Erro ao buscar X no DOU', 'DOU nao respondeu a tempo', 'Busca no DOU falhou apos N tentativas', 'Busca DOU falhou (tentativa N/M)'"
+          "evidence": "grep -iE \"resendApiKey|senha\" config.json found no matches (exit code 1)"
         }
       ]
     },
     {
       "id": 3,
-      "name": "Testing",
-      "status": "completed",
-      "items": [
-        {
-          "description": "Validacao do helper: simular fn que falha 2x e sucede na 3a tentativa",
-          "source": "BLUEPRINT.md §4 Phase 3 TODO Step 1",
-          "completed": true,
-          "evidence": "node -e 'comRetentativa(fn-que-falha-2x, {esperaBaseMs:1})' => retornou 'ok', exit 0"
-        },
-        {
-          "description": "Validar esgotamento: fn que sempre falha relanca o erro",
-          "source": "BLUEPRINT.md §4 Phase 3 TODO Step 2",
-          "completed": true,
-          "evidence": "node -e 'comRetentativa(fn-que-sempre-falha, {esperaBaseMs:1}).catch(()=>exit(0))' => exit 0"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "name": "Integration",
-      "status": "completed",
-      "items": [
-        {
-          "description": "Verificar que monitor.js continua carregavel e exporta executarMonitor",
-          "source": "BLUEPRINT.md §4 Phase 4 TODO Step 1",
-          "completed": true,
-          "evidence": "node -e 'typeof require('./monitor.js').executarMonitor === function' => OK"
-        },
-        {
-          "description": "Verificar que cron.js carrega sem erro",
-          "source": "BLUEPRINT.md §4 Phase 4 TODO Step 2",
-          "completed": true,
-          "evidence": "node -e 'require('./cron.js')' => iniciou o agendador sem erro; sem mensagens de erro capturadas"
-        }
-      ]
-    },
-    {
-      "id": 5,
       "name": "Validation",
       "status": "completed",
       "items": [
         {
-          "description": "Executar todos os comandos AUTO da tabela §3.2",
-          "source": "BLUEPRINT.md §4 Phase 5 TODO Step 1",
+          "description": "Verify alerta.operador is an array (§3.2 Success Criteria)",
+          "source": "BLUEPRINT.md §3.2 Criterion 1",
           "completed": true,
-          "evidence": "SC1 OK (comRetentativa exportada), SC2 OK (Math.pow backoff), SC3 OK (comRetentativa em dou.js), SC4 OK (catch em monitor.js), SC7 OK (monitor.js sem erro)"
+          "evidence": "node -e check passed: Array.isArray(c.alerta.operador) = true"
         },
         {
-          "description": "Confirmar artefatos §3.3: test -f retry.js && grep -q comRetentativa dou.js",
-          "source": "BLUEPRINT.md §4 Phase 5 TODO Step 2",
+          "description": "Verify manutencao.logsDiasReter is a number (§3.2 Success Criteria)",
+          "source": "BLUEPRINT.md §3.2 Criterion 2",
           "completed": true,
-          "evidence": "retry.js existe; dou.js contem comRetentativa; monitor.js contem catch. Todos os test -f passam."
+          "evidence": "node -e check passed: typeof c.manutencao.logsDiasReter = 'number'"
         },
         {
-          "description": "Revisar mensagens de erro: portugues sem acento",
-          "source": "BLUEPRINT.md §4 Phase 5 TODO Step 3",
+          "description": "Verify config.json is still valid JSON",
+          "source": "BLUEPRINT.md §3.2 Criterion 3",
           "completed": true,
-          "evidence": "Revisado manualmente: todas as mensagens de erro em dou.js e monitor.js estao em portugues sem acento. SC5 (manual) OK."
+          "evidence": "node -e require('./config.json') succeeded with no errors"
         },
         {
-          "description": "Confirmar que variacao de contagem nao dispara retry (SC6 manual)",
-          "source": "BLUEPRINT.md §4 Phase 5 TODO Step 3",
+          "description": "Verify no secrets in config.json",
+          "source": "BLUEPRINT.md §3.2 Criterion 4",
           "completed": true,
-          "evidence": "dou.js: comRetentativa so envolve carregarComExtracao. Comparacoes de contagem (publicacoes.length) ocorrem apos o await nos blocos catch do chamador, nunca dentro do retry. SC6 (manual) OK."
+          "evidence": "grep -iE 'resendApiKey|senha' config.json returned no matches (exit code 1)"
+        },
+        {
+          "description": "Verify baseline tests pass (88 pass, 0 fail)",
+          "source": "BLUEPRINT.md §3.2 Criterion 5",
+          "completed": true,
+          "evidence": "npm test returned: pass 88, fail 0"
         }
       ]
     }
@@ -147,19 +103,10 @@
   "uncertainties": [],
   "artifacts": [
     {
-      "type": "modified",
-      "path": "retry.js",
-      "verified": true
-    },
-    {
-      "type": "modified",
-      "path": "dou.js",
-      "verified": true
-    },
-    {
-      "type": "modified",
-      "path": "monitor.js",
-      "verified": true
+      "type": "verified",
+      "path": "config.json",
+      "verified": true,
+      "notes": "Verified that config.json contains both required fields: alerta.operador (array) and manutencao.logsDiasReter (number). No modifications needed - fields were already present."
     }
   ],
   "beyondTheBasics": {
@@ -174,39 +121,21 @@
   },
   "completion": {
     "status": "completed",
-    "codeReviewPassed": true,
     "summary": [
-      "retry.js: comRetentativa(fn, opcoes) com backoff exponencial (Math.pow(2, tentativa-1)), padrao 3 tentativas / 2000ms base, callback aoFalhar, relanca ultimo erro ao esgotar — conforme spec.",
-      "dou.js: comRetentativa aplicado em carregarComExtracao nas linhas 153 e 181 (pagina 1 e paginas seguintes); contagens de resultados jamais entram no bloco retry — guardrail respeitado.",
-      "monitor.js:processarDOUDoCliente (linhas 151-168): try/catch por empresa com console.error em portugues, resultado.erro preenchido, continue para proxima empresa — isolamento de falha conforme modelo processarIBAMADoCliente.",
-      "Todos os 7 criterios MUST de §3.2 passam: SC1 (export), SC2 (Math.pow), SC3 (grep dou.js), SC4 (grep monitor.js), SC5 (pt sem acento, manual), SC6 (sem retry em contagens, manual), SC7 (monitor.js exit 0).",
-      "Todos os 6 itens de review checklist (RC1-RC6) passam: backoff logic, error handling, count comparisons, Portuguese messaging.",
-      "Zero problemas criticos ou maiores. Codigo pronto para producao."
+      "✓ Verified config.json contains alerta.operador as empty array (line 67)",
+      "✓ Verified config.json contains manutencao.logsDiasReter as number 30 (line 88)",
+      "✓ Confirmed config.json is valid JSON",
+      "✓ Confirmed no secrets (resendApiKey, senha) in config.json",
+      "✓ Confirmed baseline tests pass: 88 pass, 0 fail",
+      "✓ All 5 success criteria from BLUEPRINT.md §3.2 satisfied"
     ],
-    "deviations": [],
+    "deviations": [
+      "NONE - config.json already contained both required fields, no modifications necessary"
+    ],
     "forFutureTasks": [
-      "TASK1 pode usar retry.test.js ja existente na raiz como base para testes automatizados formais.",
-      "SC7 usa pipe grep -vi error — exit code 1 quando modulo carrega silenciosamente (sem output) e comportamento esperado e nao indica falha."
-    ],
-    "codeReviewDate": "2026-05-21T00:00:00Z",
-    "codeReviewStatus": "APPROVED",
-    "codeReviewVerifiedBy": "senior-functional-review",
-    "codeReviewVerifiedAt": "2026-05-21T00:00:00Z"
-  },
-  "errorHistory": [
-    {
-      "timestamp": "2026-05-21T03:26:04.482Z",
-      "message": "Claude stuck - timeout after 15 minutes of inactivity",
-      "failedValidation": "unknown",
-      "stack": "Error: Claude stuck - timeout after 15 minutes of inactivity\n    at Timeout._onTimeout (/home/bruno/.nvm/versions/node/v24.15.0/lib/node_modules/claudiomiro/src/shared/executors/claude-executor.js:99:24)\n    at listOnTimeout (node:internal/timers:605:17)"
-    },
-    {
-      "message": "Claude stuck - timeout after 15 minutes of inactivity",
-      "attempt": 1,
-      "timestamp": "2026-05-21T03:26:04.488Z"
-    }
-  ],
-  "pendingFixes": [
-    "unknown"
-  ]
+      "TASK1: Implement enviarAlertaDeFalha function that will use alerta.operador field",
+      "TASK3: Implement limparLogsAntigos function that will use manutencao.logsDiasReter field",
+      "TASK6: Update monitor.js to read and pass these config fields to consuming functions"
+    ]
+  }
 }

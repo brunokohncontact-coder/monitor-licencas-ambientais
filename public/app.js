@@ -23,20 +23,23 @@ function formatarDataHora(iso) {
 // ─── PÁGINA: RELATÓRIOS (index.html) ─────────────────────────────────────────
 
 let pollingVarredura = null;
+let pollingAutoteste = null;
 
 async function carregarPaginaRelatorios() {
   const btnVarredura = document.getElementById('btn-varredura');
   const btnFechar = document.getElementById('btn-fechar');
+  const btnAutoteste = document.getElementById('btn-autoteste');
 
   btnVarredura.addEventListener('click', dispararVarredura);
   btnFechar.addEventListener('click', fecharDetalhe);
+  if (btnAutoteste) btnAutoteste.addEventListener('click', dispararAutoteste);
 
   document.getElementById('lista-relatorios').addEventListener('click', function (e) {
     const btn = e.target.closest('[data-relatorio]');
     if (btn) abrirRelatorio(btn.dataset.relatorio);
   });
 
-  await Promise.all([carregarRelatorios(), iniciarPollingVarredura()]);
+  await Promise.all([carregarRelatorios(), iniciarPollingVarredura(), iniciarPollingAutoteste()]);
 }
 
 async function carregarRelatorios() {
@@ -346,6 +349,81 @@ async function iniciarPollingVarredura() {
       pollingVarredura = setInterval(consultarStatusVarredura, 2000);
     }
   } catch (e) { /* ignora — não bloqueia o carregamento da página */ }
+}
+
+// ─── Autoteste de fontes ──────────────────────────────────────────────────────
+
+async function dispararAutoteste() {
+  const btn = document.getElementById('btn-autoteste');
+  btn.disabled = true;
+  document.getElementById('resultado-autoteste').innerHTML = '';
+
+  try {
+    const r = await fetch('/api/autoteste', { method: 'POST' });
+    const dados = await r.json();
+    if (!r.ok) throw new Error(dados.erro || 'HTTP ' + r.status);
+    atualizarStatusAutoteste(dados.estado);
+    pollingAutoteste = setInterval(consultarStatusAutoteste, 2000);
+  } catch (e) {
+    document.getElementById('status-autoteste').innerHTML =
+      '<span class="erro">Erro: ' + esc(e.message) + '</span>';
+    btn.disabled = false;
+  }
+}
+
+async function consultarStatusAutoteste() {
+  try {
+    const r = await fetch('/api/autoteste/status');
+    const estado = await r.json();
+    atualizarStatusAutoteste(estado);
+
+    if (estado.status !== 'em execucao') {
+      clearInterval(pollingAutoteste);
+      pollingAutoteste = null;
+      document.getElementById('btn-autoteste').disabled = false;
+      if (estado.resultado) renderizarResultadoAutoteste(estado.resultado);
+    }
+  } catch (e) {
+    clearInterval(pollingAutoteste);
+    pollingAutoteste = null;
+    document.getElementById('btn-autoteste').disabled = false;
+  }
+}
+
+function atualizarStatusAutoteste(estado) {
+  if (!estado) return;
+  const el = document.getElementById('status-autoteste');
+  const classes = { ocioso: '', 'em execucao': 'aviso', concluido: 'ok', erro: 'erro' };
+  const cls = classes[estado.status] || '';
+  const badge = cls ? '<span class="badge ' + cls + '">' + esc(estado.status) + '</span>' : '';
+  const detalhe = estado.erro
+    ? ' — <span class="erro">' + esc(estado.erro) + '</span>'
+    : (estado.concluidoEm ? ' — ' + formatarDataHora(estado.concluidoEm) : '');
+  el.innerHTML = badge + detalhe;
+}
+
+function renderizarResultadoAutoteste(resultado) {
+  const el = document.getElementById('resultado-autoteste');
+  if (!resultado || !Array.isArray(resultado.linhas)) { el.innerHTML = ''; return; }
+  const corLinha = function (linha) {
+    if (linha.includes(': OK')) return '<li class="saude-ok">' + esc(linha) + '</li>';
+    return '<li class="saude-falha">' + esc(linha) + '</li>';
+  };
+  el.innerHTML = '<ul class="autoteste-resultado">' + resultado.linhas.map(corLinha).join('') + '</ul>';
+}
+
+async function iniciarPollingAutoteste() {
+  try {
+    const r = await fetch('/api/autoteste/status');
+    const estado = await r.json();
+    atualizarStatusAutoteste(estado);
+    if (estado.status === 'em execucao') {
+      document.getElementById('btn-autoteste').disabled = true;
+      pollingAutoteste = setInterval(consultarStatusAutoteste, 2000);
+    } else if (estado.resultado) {
+      renderizarResultadoAutoteste(estado.resultado);
+    }
+  } catch (e) { /* ignora — nao bloqueia o carregamento da pagina */ }
 }
 
 // ─── PÁGINA: EMPRESAS (empresas.html) ────────────────────────────────────────

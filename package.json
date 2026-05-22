@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test",
-    "painel": "node painel.js"
+    "painel": "node painel.js",
+    "autoteste": "node autoteste.js"
   },
   "keywords": [],
   "author": "",

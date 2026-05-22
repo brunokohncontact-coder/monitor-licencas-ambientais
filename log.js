@@ -97,4 +97,30 @@ function fechar() {
   stream = null;
 }
 
-module.exports = { iniciar, fechar, LOG_DIR };
+// Remove arquivos de log mais antigos que `diasReter` dias.
+// Chamada uma vez por execucao para evitar acumulo indefinido no disco.
+// Nao lanca excecao — uma falha na limpeza nao pode derrubar o monitor.
+// _dir e injetavel para os testes (sem tocar no logs/ real).
+function limparLogsAntigos(diasReter, _dir) {
+  const dir = _dir || LOG_DIR;
+  const dias = Number.isFinite(diasReter) && diasReter > 0 ? diasReter : 30;
+  const limiteMs = dias * 24 * 60 * 60 * 1000;
+  const agora = Date.now();
+  try {
+    if (!fs.existsSync(dir)) return;
+    const arquivos = fs.readdirSync(dir);
+    for (const nome of arquivos) {
+      if (!/^\d{4}-\d{2}-\d{2}\.log$/.test(nome)) continue;
+      const caminho = path.join(dir, nome);
+      const stat = fs.statSync(caminho);
+      if (agora - stat.mtimeMs > limiteMs) {
+        fs.unlinkSync(caminho);
+        console.log(`Log antigo removido: ${nome}`);
+      }
+    }
+  } catch (err) {
+    console.warn(`Aviso: falha ao limpar logs antigos: ${err.message}`);
+  }
+}
+
+module.exports = { iniciar, fechar, limparLogsAntigos, LOG_DIR };

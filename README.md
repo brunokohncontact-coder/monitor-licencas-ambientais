@@ -69,7 +69,12 @@ A configuracao fica em **dois arquivos**:
   varre a uniao das UFs das empresas ativas — e `diasMaximos` define a janela
   retroativa de busca em dias.
 - `alerta` — se o e-mail esta ativo e o remetente `de` (global). A chave da
-  API Resend fica em `config.local.json`.
+  API Resend fica em `config.local.json`. O campo opcional `operador` (array
+  de e-mails) define quem recebe o aviso de falha quando o monitor termina
+  com problemas (ex.: `"operador": ["ops@empresa.com"]`).
+- `manutencao` — configuracoes de manutencao do sistema. Hoje suporta
+  `logsDiasReter` (inteiro, padrao 30): numero de dias de logs em `logs/`
+  a manter; logs mais antigos sao apagados automaticamente a cada execucao.
 
 > Configuracoes no formato antigo (mono-cliente, com `empresas` no topo) sao
 > convertidas automaticamente para um unico cliente `default` — continuam
@@ -143,6 +148,16 @@ senha configurada acima e oferece:
 
 Para encerrar o painel, use `Ctrl+C` no terminal.
 
+### Autoteste das fontes
+
+```
+npm run autoteste
+```
+
+Checa a conectividade de cada fonte (DOU, IBAMA, DOESP, Resend) e imprime
+`OK` ou `FALHOU` por fonte. Sai com codigo 0 se tudo estiver ok, 1 se alguma
+fonte falhou. Nao gera relatorio nem envia e-mail.
+
 ### Testes
 
 ```
@@ -168,13 +183,71 @@ arquivo tem uma responsabilidade clara:
 | `alerta.js`        | Monta e envia o e-mail de alerta                            |
 | `config-loader.js` | Le e mescla `config.json` + `config.local.json`             |
 | `retry.js`         | Reexecuta operacoes de rede que falham (tolerancia a falhas) |
-| `log.js`           | Espelha as mensagens do console para arquivos em `logs/`     |
+| `log.js`           | Espelha as mensagens do console para arquivos em `logs/`; limpa logs antigos |
+| `saude.js`         | Calcula o resumo de saude a partir dos erros do relatorio   |
+| `autoteste.js`     | Checa conectividade das fontes; CLI `npm run autoteste`     |
 | `cron.js`          | Agendador da execucao automatica                            |
 | `painel.js`        | Servidor web do painel de operador (Express + sessao)       |
 
 O ponto de entrada e `monitor.js`. Falhas de rede sao tratadas de forma
 resiliente: a busca do DOU e retentada automaticamente, e um erro em uma
 empresa ou fonte nao derruba o restante da execucao.
+
+## Execucao automatica no Windows
+
+O monitor pode ser configurado para rodar sozinho toda vez que o computador
+for ligado, usando a **pasta de Inicializacao do Windows** (`shell:startup`).
+
+### Passo a passo
+
+1. Abra o Explorador de Arquivos, pressione `Win+R`, digite `shell:startup` e
+   clique em OK. Isso abre a pasta onde ficam os programas que sobem
+   automaticamente ao ligar o Windows.
+2. Crie um atalho para o arquivo `executar-monitor.bat` nessa pasta
+   (clique com o botao direito no arquivo > "Criar atalho", depois mova o
+   atalho para a pasta de Inicializacao).
+3. Pronto. A partir do proximo boot, o Windows executara o bat automaticamente.
+
+### Como funciona o `executar-monitor.bat`
+
+O script faz o seguinte na ordem:
+
+1. Entra na pasta do projeto (`cd /d`).
+2. Obtem a data de hoje em formato ISO (`YYYY-MM-DD`) via `node -e`, sem depender
+   do formato regional do Windows.
+3. **Guarda de "uma vez por dia":** verifica se o arquivo
+   `relatorio-AAAA-MM-DD.json` do dia ja existe. Se sim, registra no console
+   que o monitor ja rodou hoje e sai com codigo 0 sem fazer nada.
+4. Caso o relatorio nao exista, executa `node monitor.js` e propaga o codigo
+   de saida (0 = ok, 1 = falha fatal).
+
+Essa guarda evita que o monitor rode duas vezes no mesmo dia caso o computador
+seja reiniciado ou entre em hibernacao e volte.
+
+### Agendador de Tarefas (alternativa)
+
+Para quem mantem o computador ligado em horario fixo, o Agendador de Tarefas
+do Windows (`taskschd.msc`) e uma alternativa mais precisa: crie uma tarefa
+que dispara `executar-monitor.bat` na hora desejada (ex.: 8h em dias uteis).
+Essa abordagem **nao** e necessaria se a opcao com a pasta de Inicializacao
+acima for suficiente.
+
+### Autoteste das fontes
+
+Para verificar rapidamente se as fontes de dados estao acessiveis:
+
+```
+npm run autoteste
+```
+
+Abre o navegador, faz uma busca minima no DOU, checa a URL do IBAMA com uma
+requisicao leve, testa o DOESP e verifica se a chave Resend esta configurada.
+Imprime `OK` ou `FALHOU - <motivo>` por fonte e sai com codigo 0 (tudo ok)
+ou 1 (alguma fonte falhou). Nao gera relatorio, nao envia e-mail, nao grava
+no banco — serve apenas para diagnosticar conectividade.
+
+O painel tambem oferece um botao **"Testar Fontes"** na tela principal que
+dispara o autoteste de forma assincrona e exibe o resultado por fonte.
 
 ## Roteiro de desenvolvimento
 
@@ -183,13 +256,25 @@ cada etapa concluida.
 
 - **Fase 2** (concluida) — coleta no DOU e IBAMA, deduplicacao, alerta por
   e-mail e agendamento.
-- **Fase 3** (em andamento):
+- **Fase 3** (concluida):
   - Etapa 1 (concluida) — robustez e cobertura de testes automatizados.
   - Etapa 2 (concluida) — **suporte a multiplos clientes**: cada cliente com
     suas empresas, sua deduplicacao isolada e seu e-mail proprio.
   - Etapa 3 (concluida) — **mais fontes de dados**: diarios oficiais
     estaduais (DOESP) e categorizacao das publicacoes do ICMBio no DOU
     (ver secoes abaixo); o painel web vem na etapa seguinte.
+- **Fase 4** (concluida):
+  - Etapa 1 (concluida) — **auto-diagnostico e aviso de falha**: o relatorio
+    ganha um campo `saude` com status geral e contagem por fonte; quando uma
+    fonte falha, o operador recebe um e-mail de aviso automatico separado
+    do e-mail dos clientes.
+  - Etapa 2 (concluida) — **execucao autonoma no Windows**: `process.exit`
+    correto no CLI, script `executar-monitor.bat` para a pasta de
+    Inicializacao do Windows e limpeza automatica de logs antigos
+    (configuravel em `config.json` > `manutencao.logsDiasReter`).
+  - Etapa 3 (concluida) — **autoteste de fontes**: comando
+    `npm run autoteste`, botao "Testar Fontes" no painel e rota
+    `POST /api/autoteste`.
 
 ## Diarios oficiais estaduais
 

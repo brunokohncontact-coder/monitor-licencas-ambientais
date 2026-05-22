@@ -83,5 +83,8 @@
   },
   "painel": {
     "porta": 3000
+  },
+  "manutencao": {
+    "logsDiasReter": 30
   }
 }

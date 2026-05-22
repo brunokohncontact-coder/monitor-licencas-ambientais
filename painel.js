@@ -17,6 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { executarMonitor } = require('./monitor');
+const { rodarAutoteste } = require('./autoteste');
 const { carregarConfig } = require('./config-loader');
 
 const RAIZ = __dirname;
@@ -42,6 +43,16 @@ let estadoVarredura = {
   status: 'ocioso',
   iniciadoEm: null,
   concluidoEm: null,
+  erro: null,
+};
+
+// Estado do autoteste de fontes. Mesma logica da varredura: a rota
+// POST /api/autoteste dispara rodarAutoteste de forma assincrona.
+let estadoAutoteste = {
+  status: 'ocioso',
+  iniciadoEm: null,
+  concluidoEm: null,
+  resultado: null,
   erro: null,
 };
 
@@ -531,6 +542,51 @@ function criarApp(opcoes = {}) {
   // Estado atual da varredura: ocioso / em execucao / concluido / erro.
   app.get('/api/varredura/status', exigirSessao, (req, res) => {
     res.json(estadoVarredura);
+  });
+
+  // Dispara o autoteste de fontes. Igual a varredura: assincrono, nao bloqueia
+  // o event loop. A rota retorna 202 imediatamente; o resultado fica em
+  // GET /api/autoteste/status quando o teste terminar.
+  app.post('/api/autoteste', exigirSessao, (req, res) => {
+    if (estadoAutoteste.status === 'em execucao') {
+      return res.status(409).json({ erro: 'Autoteste ja em execucao.', estado: estadoAutoteste });
+    }
+
+    estadoAutoteste = {
+      status: 'em execucao',
+      iniciadoEm: new Date().toISOString(),
+      concluidoEm: null,
+      resultado: null,
+      erro: null,
+    };
+
+    const config = carregarConfig();
+    rodarAutoteste(config)
+      .then((resultado) => {
+        estadoAutoteste = {
+          status: 'concluido',
+          iniciadoEm: estadoAutoteste.iniciadoEm,
+          concluidoEm: new Date().toISOString(),
+          resultado,
+          erro: null,
+        };
+      })
+      .catch((err) => {
+        estadoAutoteste = {
+          status: 'erro',
+          iniciadoEm: estadoAutoteste.iniciadoEm,
+          concluidoEm: new Date().toISOString(),
+          resultado: null,
+          erro: err && err.message ? err.message : String(err),
+        };
+      });
+
+    res.status(202).json({ ok: true, estado: estadoAutoteste });
+  });
+
+  // Estado atual do autoteste: ocioso / em execucao / concluido / erro.
+  app.get('/api/autoteste/status', exigirSessao, (req, res) => {
+    res.json(estadoAutoteste);
   });
 
   return app;

@@ -13,6 +13,7 @@ const { DIARIOS, ufsParaVarrer } = require('./diario-estadual');
 const { carregarConfig } = require('./config-loader');
 const { calcularSaude } = require('./saude');
 const logger = require('./log');
+const { limparLogsAntigos } = require('./log');
 
 // Verifica se uma publicacao e relevante para monitoramento ambiental.
 // Criterios: o tipo OU o titulo contem palavras do filtro configurado.
@@ -170,6 +171,16 @@ function destinatariosOperador(config) {
 
 async function executarMonitor(opcoes = {}) {
   const arquivoLog = logger.iniciar();
+
+  // Limpeza de logs antigos — best-effort, nao derruba o monitor se falhar.
+  try {
+    const cfg = opcoes.config || carregarConfig();
+    const diasReter = cfg.manutencao && cfg.manutencao.logsDiasReter;
+    limparLogsAntigos(diasReter);
+  } catch {
+    // carregarConfig pode falhar antes do erro fatal abaixo — ignora aqui.
+  }
+
   try {
     return await executarMonitorInterno(opcoes, arquivoLog);
   } catch (err) {
@@ -400,11 +411,23 @@ async function processarDiariosDoCliente(browser, empresasAtivas, db, clienteId,
   return diariosPorUF;
 }
 
+// Verifica se uma data no formato DD-MM-YYYY e fim de semana.
+// Usado para rejeitar datas explicitamente passadas na CLI que caiam no sabado
+// ou domingo — o DOU nao publica nesses dias.
+function ehFimDeSemana(data) {
+  if (typeof data !== 'string') return false;
+  const partes = data.split('-');
+  if (partes.length !== 3) return false;
+  const d = new Date(Number(partes[2]), Number(partes[1]) - 1, Number(partes[0]));
+  const dia = d.getDay();
+  return dia === 0 || dia === 6;
+}
+
 async function executarMonitorInterno(opcoes, arquivoLog) {
   const config = opcoes.config || carregarConfig();
   const hoje = opcoes.data || dataDeHoje();
 
-  if (!hoje) {
+  if (!hoje || ehFimDeSemana(hoje)) {
     console.log('Hoje e fim de semana. O DOU nao publica aos sabados e domingos. Nada a fazer.');
     return null;
   }
@@ -601,9 +624,16 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
 
 // Se chamado diretamente (node monitor.js), executa imediatamente.
 // Aceita argumento de data: node monitor.js 15-05-2026
+// Sai com codigo 0 em sucesso (inclusive fim de semana) e 1 em falha fatal,
+// para que o Agendador do Windows possa detectar falhas automaticamente.
 if (require.main === module) {
   const dataArg = process.argv[2] || null;
-  executarMonitor(dataArg ? { data: dataArg } : {}).catch(console.error);
+  executarMonitor(dataArg ? { data: dataArg } : {})
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }
 
 module.exports = { executarMonitor, ehRelevante };
