@@ -1,7 +1,7 @@
 // Painel Web — Monitor de Licenciamento Ambiental
 // Consome as rotas definidas em painel.js (TASK8). Sem frameworks.
 
-// ─── Utilitários ─────────────────────────────────────────────────────────────
+// ─── Utilitarios ─────────────────────────────────────────────────────────────
 
 function esc(s) {
   return String(s == null ? '' : s)
@@ -20,7 +20,7 @@ function formatarDataHora(iso) {
   }
 }
 
-// ─── PÁGINA: RELATÓRIOS (index.html) ─────────────────────────────────────────
+// ─── PAGINA: RELATORIOS (index.html) ─────────────────────────────────────────
 
 let pollingVarredura = null;
 let pollingAutoteste = null;
@@ -55,10 +55,10 @@ async function carregarRelatorios() {
   }
 }
 
-// Monta o item "Saúde da execução" do status. Relatórios da Fase 4 trazem
-// status.saudeUltimoRelatorio; relatórios legados (sem o campo saude) vêm com
-// null — neste caso cai no comportamento antigo, mostrando só a contagem de
-// erros do último relatório.
+// Monta o item "Saude da execucao" do status. Relatorios da Fase 4 trazem
+// status.saudeUltimoRelatorio; relatorios legados (sem o campo saude) vem com
+// null — neste caso cai no comportamento antigo, mostrando so a contagem de
+// erros do ultimo relatorio.
 function renderizarSaude(status) {
   const saude = status.saudeUltimoRelatorio;
 
@@ -426,7 +426,7 @@ async function iniciarPollingAutoteste() {
   } catch (e) { /* ignora — nao bloqueia o carregamento da pagina */ }
 }
 
-// ─── PÁGINA: EMPRESAS (empresas.html) ────────────────────────────────────────
+// ─── PAGINA: EMPRESAS (empresas.html) ────────────────────────────────────────
 
 let dadosClientes = [];
 
