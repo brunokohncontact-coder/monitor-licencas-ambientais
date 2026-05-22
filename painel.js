@@ -60,6 +60,20 @@ let estadoAutoteste = {
 // Funcoes puras (testaveis isoladamente)
 // ---------------------------------------------------------------------------
 
+// Envolve uma Promise com timeout. Se a promise nao resolver em timeoutMs,
+// rejeita com erro de timeout.
+function promiseComTimeout(promise, timeoutMs, label = 'operacao') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`Timeout: ${label} excedeu ${timeoutMs}ms`)),
+        timeoutMs
+      )
+    ),
+  ]);
+}
+
 // Normaliza um relatorio para a visao multi-cliente.
 // - Relatorio novo (Fase 3, ja tem clientes[]): devolvido como esta.
 // - Relatorio legado (Fase 2, shape plano { data, executadoEm, resultados,
@@ -518,7 +532,8 @@ function criarApp(opcoes = {}) {
     };
 
     // Sem await: a rota nao bloqueia o event loop esperando a varredura.
-    executarMonitor()
+    // Timeout de 30 min para proteger contra operacoes travadas.
+    promiseComTimeout(executarMonitor(), 30 * 60 * 1000, 'executarMonitor')
       .then(() => {
         estadoVarredura = {
           status: 'concluido',
@@ -560,8 +575,22 @@ function criarApp(opcoes = {}) {
       erro: null,
     };
 
-    const config = carregarConfig();
-    rodarAutoteste(config)
+    let config;
+    try {
+      config = carregarConfig();
+    } catch (err) {
+      estadoAutoteste = {
+        status: 'erro',
+        iniciadoEm: estadoAutoteste.iniciadoEm,
+        concluidoEm: new Date().toISOString(),
+        resultado: null,
+        erro: err && err.message ? err.message : String(err),
+      };
+      return res.status(500).json({ erro: 'Falha ao carregar configuracao', estado: estadoAutoteste });
+    }
+
+    // Timeout de 5 min para proteger contra operacoes travadas.
+    promiseComTimeout(rodarAutoteste(config), 5 * 60 * 1000, 'rodarAutoteste')
       .then((resultado) => {
         estadoAutoteste = {
           status: 'concluido',
