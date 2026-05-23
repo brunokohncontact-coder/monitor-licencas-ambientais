@@ -12,6 +12,7 @@ const { buscarFonte: buscarFonteIBAMA, normalizarCNPJ } = require('./ibama');
 const { DIARIOS, ufsParaVarrer } = require('./diario-estadual');
 const { carregarConfig } = require('./config-loader');
 const { calcularSaude } = require('./saude');
+const { classificarPublicacao } = require('./classificador');
 const logger = require('./log');
 const { limparLogsAntigos } = require('./log');
 
@@ -254,6 +255,11 @@ async function processarDOUDoCliente(browser, empresasAtivas, hoje, db, clienteI
     const relevantesTodos = resultado.publicacoes.filter((pub) => ehRelevante(pub, config));
     const { novas, jaAlertadas } = filtrarNaoAlertadas(db, relevantesTodos, 'DOU', clienteId);
 
+    // Anexa classificacao de gravidade em cada publicacao relevante do DOU
+    for (const pub of novas) {
+      pub.classificacao = classificarPublicacao(pub);
+    }
+
     for (const pub of novas) {
       if (pub.classPK) {
         contextoDOU[pub.classPK] = { cnpj: empresa.cnpj, empresa: empresa.nome };
@@ -378,6 +384,11 @@ async function processarDiariosDoCliente(browser, empresasAtivas, db, clienteId,
       }
 
       const { novas, jaAlertadas } = filtrarNaoAlertadas(db, todas, diario.fonte, clienteId);
+
+      // Anexa classificacao de gravidade em cada publicacao nova do diario estadual
+      for (const pub of novas) {
+        pub.classificacao = classificarPublicacao(pub);
+      }
 
       for (const pub of novas) {
         if (pub.classPK) {
