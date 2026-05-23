@@ -275,6 +275,56 @@ cada etapa concluida.
   - Etapa 3 (concluida) — **autoteste de fontes**: comando
     `npm run autoteste`, botao "Testar Fontes" no painel e rota
     `POST /api/autoteste`.
+- **Fase 5** (concluida) — **classificacao de gravidade**: classificador
+  deterministico de 8 regras (`classificador.js`), e-mail rico com secao
+  "Atencao Imediata" e badges por gravidade, painel com 3 cards de KPI e
+  listagem ordenada por criticidade.
+
+## Fase 5 — Classificacao de gravidade
+
+A Fase 5 adiciona gravidade explicita a cada publicacao monitorada, permitindo
+priorizar o que e urgente no e-mail e no painel.
+
+### Classificador
+
+- `classificador.js` expoe `classificarPublicacao(pub)` — funcao pura e
+  deterministica (sem rede, sem estado).
+- 8 regras avaliadas em ordem (primeira que bater vence):
+  - **critica** — embargo, interdicao, suspensao ou cassacao de licenca.
+  - **alta** — auto de infracao, notificacao.
+  - **media** — renovacao de licenca, exigencia/condicionante,
+    portaria/resolucao.
+  - **baixa** — licenca concedida; fallback para qualquer publicacao nao
+    enquadrada nas regras acima.
+- Retorno: `{ gravidade, prazo, acao, explicacao }` em portugues sem acento.
+
+### Pipeline
+
+- Publicacoes DOU (`relevantes[]`) e DOESP (`novas[]`) recebem o campo
+  `classificacao` no relatorio em disco.
+- Fonte IBAMA mantem gravidade inferida pela chave: `autos` → alta,
+  `embargos` → critica.
+
+### E-mail
+
+- `alerta.js:gerarHtml` renderiza secao **"Atencao Imediata"** quando ha
+  publicacoes criticas/altas (DOU/DOESP) ou novas no IBAMA.
+- Badges coloridos por gravidade (CSS inline, sem dependencia externa).
+- Rodape com contagem de novas publicacoes, empresas monitoradas e data da
+  proxima varredura.
+
+### Dashboard
+
+- Tres cards de KPI no topo: **Alertas urgentes hoje** /
+  **Empresas monitoradas** / **Ultima execucao**.
+- Badge de gravidade em cada publicacao.
+- Listagem ordenada: critica > alta > media > baixa.
+- Layout responsivo (abaixo de 600 px colapsa para coluna unica).
+
+### Retrocompatibilidade
+
+- Relatorios anteriores a Fase 5 (sem o campo `classificacao`) continuam
+  abrindo no painel e gerando e-mail sem erro.
 
 ## Diarios oficiais estaduais
 
