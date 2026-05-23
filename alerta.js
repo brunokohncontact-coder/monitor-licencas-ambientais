@@ -19,128 +19,265 @@ function contarAlertas(relatorio) {
   return { dou, ibama, diarios, total: dou + ibama + diarios };
 }
 
-// Gera o corpo HTML do e-mail de alerta
-function gerarHtml(relatorio) {
-  const t = contarAlertas(relatorio);
+// Cores por gravidade (CSS inline obrigatorio para compat. com clientes de e-mail).
+// Valores fixos definidos pela spec da Fase 5.
+function cssBadge(gravidade) {
+  if (gravidade === 'critica') {
+    return 'display:inline-block; background:#fee2e2; color:#991b1b; border-left:4px solid #dc2626; padding:2px 8px; font-size:11px; font-weight:700; border-radius:3px;';
+  }
+  if (gravidade === 'alta') {
+    return 'display:inline-block; background:#ffedd5; color:#9a3412; border-left:4px solid #ea580c; padding:2px 8px; font-size:11px; font-weight:700; border-radius:3px;';
+  }
+  if (gravidade === 'media') {
+    return 'display:inline-block; background:#fef9c3; color:#854d0e; padding:2px 8px; font-size:11px; font-weight:700; border-radius:3px;';
+  }
+  // baixa (ou sem classificacao se chamado por engano)
+  return 'display:inline-block; background:#dcfce7; color:#166534; padding:2px 8px; font-size:11px; font-weight:700; border-radius:3px;';
+}
 
-  const linhasEmpresas = relatorio.resultados
-    .filter((r) => r.relevantes.length > 0)
-    .map((res) => {
-      const pubs = res.relevantes
-        .map((pub) => {
-          // Publicacoes do ICMBio (orgaoCategoria) recebem um selo destacado.
-          const seloICMBio =
-            pub.orgaoCategoria === 'ICMBio'
-              ? ' <span style="display:inline-block; background:#16635a; color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:3px;">ICMBio</span>'
-              : '';
-          return `
-          <div style="margin:12px 0; padding:12px; background:#f8f9fa; border-left:3px solid #e74c3c; border-radius:4px;">
-            <div style="font-size:12px; color:#666; margin-bottom:4px;">${pub.tipo} &mdash; ${pub.data}${seloICMBio}</div>
-            <div style="font-weight:600; margin-bottom:4px;">${pub.titulo || '(sem titulo)'}</div>
-            <div style="font-size:12px; color:#555; margin-bottom:6px;">${pub.orgaoStr}</div>
-            <div style="font-size:13px; color:#333; margin-bottom:8px;">${pub.resumo.slice(0, 300)}${pub.resumo.length > 300 ? '...' : ''}</div>
-            <a href="${pub.link}" style="font-size:12px; color:#2980b9;">Ver no DOU &rarr;</a>
+function rotuloGravidade(gravidade) {
+  if (gravidade === 'critica') return 'CRITICA';
+  if (gravidade === 'alta') return 'ALTA';
+  if (gravidade === 'media') return 'MEDIA';
+  if (gravidade === 'baixa') return 'BAIXA';
+  return '';
+}
+
+// Coleta itens urgentes (criticas/altas) do cliente para a secao Atencao Imediata.
+// DOU/DOESP: gravidade vem de pub.classificacao (TASK0). IBAMA: gravidade INFERIDA
+// pela chave (autos = alta; embargos = critica) — nao chamar classificarPublicacao.
+function coletarUrgentes(cliente) {
+  const urgentes = [];
+  for (const res of (cliente.resultados || [])) {
+    for (const pub of (res.relevantes || [])) {
+      const grav = pub.classificacao && pub.classificacao.gravidade;
+      if (grav === 'critica' || grav === 'alta') {
+        urgentes.push({
+          empresa: res.empresa || '',
+          titulo: pub.titulo || '(sem titulo)',
+          link: pub.link || '',
+          gravidade: grav,
+          prazo: (pub.classificacao && pub.classificacao.prazo) || '',
+          acao: (pub.classificacao && pub.classificacao.acao) || '',
+          fonte: 'DOU',
+        });
+      }
+    }
+  }
+  for (const [uf, dados] of Object.entries(cliente.diariosEstaduais || {})) {
+    for (const pub of (dados.novas || [])) {
+      const grav = pub.classificacao && pub.classificacao.gravidade;
+      if (grav === 'critica' || grav === 'alta') {
+        urgentes.push({
+          empresa: pub.empresaConfig || '',
+          titulo: pub.titulo || '(sem titulo)',
+          link: pub.link || '',
+          gravidade: grav,
+          prazo: (pub.classificacao && pub.classificacao.prazo) || '',
+          acao: (pub.classificacao && pub.classificacao.acao) || '',
+          fonte: `Diario ${uf}`,
+        });
+      }
+    }
+  }
+  // IBAMA autos: inferido alta
+  const autos = cliente.ibama && cliente.ibama.autos;
+  for (const pub of ((autos && autos.novas) || [])) {
+    urgentes.push({
+      empresa: pub.empresaConfig || pub.nome || '',
+      titulo: pub.titulo || 'Auto de Infracao',
+      link: '',
+      gravidade: 'alta',
+      prazo: '20 dias corridos para apresentar defesa administrativa',
+      acao: 'Apresentar defesa administrativa',
+      fonte: 'IBAMA - Auto de Infracao',
+    });
+  }
+  // IBAMA embargos: inferido critica
+  const embargos = cliente.ibama && cliente.ibama.embargos;
+  for (const pub of ((embargos && embargos.novas) || [])) {
+    urgentes.push({
+      empresa: pub.empresaConfig || pub.nome || '',
+      titulo: pub.titulo || 'Embargo',
+      link: '',
+      gravidade: 'critica',
+      prazo: 'Imediato - verifique urgentemente',
+      acao: 'Contatar advogado ambiental imediatamente',
+      fonte: 'IBAMA - Embargo',
+    });
+  }
+  return urgentes;
+}
+
+// Linha de urgente na secao destacada.
+function montarLinhaUrgente(item) {
+  const link = item.link
+    ? `<div style="margin-top:6px;"><a href="${item.link}" style="font-size:12px; color:#2980b9;">Abrir &rarr;</a></div>`
+    : '';
+  const prazo = item.prazo
+    ? `<div style="font-style:italic; font-size:12px; color:#555; margin-bottom:4px;">${item.prazo}</div>`
+    : '';
+  const acao = item.acao
+    ? `<div style="font-weight:700; font-size:13px; color:#9a3412;">${item.acao}</div>`
+    : '';
+  return `
+        <div style="margin:10px 0; padding:10px 12px; background:#ffffff; border-radius:4px;">
+          <div style="font-size:12px; color:#666; margin-bottom:4px;">${item.empresa}${item.fonte ? ` &mdash; ${item.fonte}` : ''}</div>
+          <div style="margin-bottom:6px;">
+            <span style="${cssBadge(item.gravidade)}">${rotuloGravidade(item.gravidade)}</span>
+            <span style="font-weight:600; margin-left:8px;">${item.titulo}</span>
+          </div>
+          ${prazo}
+          ${acao}
+          ${link}
+        </div>`;
+}
+
+// Linha de publicacao normal (media/baixa, ou sem classificacao para retrocompat).
+function montarLinhaPublicacao(pub) {
+  const grav = pub.classificacao && pub.classificacao.gravidade;
+  const badge = grav
+    ? `<span style="${cssBadge(grav)}">${rotuloGravidade(grav)}</span> `
+    : '';
+  const prazo = pub.classificacao && pub.classificacao.prazo
+    ? `<div style="font-style:italic; font-size:12px; color:#555; margin-bottom:4px;">${pub.classificacao.prazo}</div>`
+    : '';
+  const acao = pub.classificacao && pub.classificacao.acao
+    ? `<div style="font-weight:700; font-size:13px; color:#854d0e;">${pub.classificacao.acao}</div>`
+    : '';
+  const link = pub.link
+    ? `<div style="margin-top:6px;"><a href="${pub.link}" style="font-size:12px; color:#2980b9;">Abrir &rarr;</a></div>`
+    : '';
+  return `
+          <div style="margin:8px 0; padding:10px 12px; background:#f8f9fa; border-radius:4px;">
+            <div style="margin-bottom:4px;">${badge}<span style="font-weight:600;">${pub.titulo || '(sem titulo)'}</span></div>
+            ${prazo}
+            ${acao}
+            ${link}
           </div>`;
-        })
-        .join('');
+}
 
+// Monta o HTML de um cliente: cabecalho, secao Atencao Imediata (se houver
+// urgentes), secoes por empresa (medias/baixas), diarios estaduais e rodape.
+function gerarHtmlCliente(cliente, dataExec, executadoEm) {
+  const urgentes = coletarUrgentes(cliente);
+  const empresasVerificadas = (cliente.resultados || []).length;
+  const totalDOU = (cliente.resultados || []).reduce(
+    (acc, r) => acc + ((r.relevantes || []).length),
+    0
+  );
+  const totalIbama = Object.values(cliente.ibama || {}).reduce(
+    (acc, f) => acc + ((f.novas || []).length),
+    0
+  );
+  const totalDiarios = Object.values(cliente.diariosEstaduais || {}).reduce(
+    (acc, d) => acc + ((d.novas || []).length),
+    0
+  );
+  const totalNovas = totalDOU + totalIbama + totalDiarios;
+
+  const secaoAtencao = urgentes.length > 0
+    ? `
+        <div style="background:#fff7ed; padding:16px; border-left:4px solid #ea580c; border-radius:6px; margin-bottom:20px;">
+          <h2 style="margin:0 0 12px 0; color:#9a3412; font-size:16px;">&#9888;&#65039; Atencao Imediata &mdash; acao necessaria</h2>
+          ${urgentes.map(montarLinhaUrgente).join('')}
+        </div>`
+    : '';
+
+  const blocosEmpresas = (cliente.resultados || [])
+    .map((res) => {
+      const pubsNormais = (res.relevantes || []).filter((pub) => {
+        const grav = pub.classificacao && pub.classificacao.gravidade;
+        return grav !== 'critica' && grav !== 'alta';
+      });
+      const totalRelevantes = (res.relevantes || []).length;
+      if (totalRelevantes === 0) {
+        return `
+        <div style="margin-bottom:20px;">
+          <h3 style="margin:0 0 4px; color:#2c3e50; font-size:14px;">${res.empresa || ''}</h3>
+          <div style="font-size:12px; color:#888; margin-bottom:6px;">CNPJ: ${res.cnpj || ''} &mdash; sem urgentes</div>
+        </div>`;
+      }
+      if (pubsNormais.length === 0) {
+        // Tudo desta empresa ja apareceu em Atencao Imediata; ainda assim
+        // mostra o cabecalho da empresa para o leitor saber o que foi visto.
+        return `
+        <div style="margin-bottom:20px;">
+          <h3 style="margin:0 0 4px; color:#2c3e50; font-size:14px;">${res.empresa || ''}</h3>
+          <div style="font-size:12px; color:#888; margin-bottom:6px;">CNPJ: ${res.cnpj || ''} &mdash; ${totalRelevantes} publicacao(oes) em Atencao Imediata</div>
+        </div>`;
+      }
+      const pubs = pubsNormais.map(montarLinhaPublicacao).join('');
       return `
-        <div style="margin-bottom:24px;">
-          <h3 style="margin:0 0 4px; color:#2c3e50;">${res.empresa}</h3>
-          <div style="font-size:12px; color:#888; margin-bottom:8px;">CNPJ: ${res.cnpj} &mdash; ${res.relevantes.length} publicacao(oes) relevante(s)</div>
+        <div style="margin-bottom:20px;">
+          <h3 style="margin:0 0 4px; color:#2c3e50; font-size:14px;">${res.empresa || ''}</h3>
+          <div style="font-size:12px; color:#888; margin-bottom:6px;">CNPJ: ${res.cnpj || ''} &mdash; ${pubsNormais.length} publicacao(oes)</div>
           ${pubs}
         </div>`;
     })
-    .join('<hr style="border:none;border-top:1px solid #eee;margin:16px 0;">');
-
-  // Secao IBAMA — uma subsecao por fonte (autos, embargos, etc).
-  // So aparece se houver algo novo.
-  const blocosIBAMA = Object.entries(relatorio.ibama || {})
-    .filter(([, dados]) => (dados.novas || []).length > 0)
-    .map(([fonteKey, dados]) => {
-      const itens = dados.novas
-        .map(
-          (pub) => `
-          <div style="margin:12px 0; padding:12px; background:#fdf2f2; border-left:3px solid #c0392b; border-radius:4px;">
-            <div style="font-size:12px; color:#666; margin-bottom:4px;">${pub.titulo} &mdash; ${pub.data}</div>
-            <div style="font-weight:600; margin-bottom:4px;">${pub.empresaConfig || pub.nome}</div>
-            <div style="font-size:12px; color:#555; margin-bottom:6px;">CNPJ: ${pub.cnpj} &mdash; ${pub.municipio}/${pub.uf} &mdash; Processo ${pub.processo}</div>
-            <div style="font-size:13px; color:#c0392b; font-weight:600; margin-bottom:6px;">Valor: R$ ${pub.valor}</div>
-            <div style="font-size:13px; color:#333;">${(pub.resumo || '').slice(0, 400)}${(pub.resumo || '').length > 400 ? '...' : ''}</div>
-          </div>`
-        )
-        .join('');
-      return `
-        <div style="margin-bottom:24px;">
-          <h3 style="margin:16px 0 8px; color:#c0392b;">IBAMA &mdash; ${fonteKey}</h3>
-          ${itens}
-        </div>`;
-    })
     .join('');
 
-  // Secao de diarios estaduais — uma subsecao por UF (ex: SP/DOESP).
-  // So aparece se houver algo novo.
-  const blocosDiarios = Object.entries(relatorio.diariosEstaduais || {})
-    .filter(([, dados]) => (dados.novas || []).length > 0)
+  const blocosDiarios = Object.entries(cliente.diariosEstaduais || {})
     .map(([uf, dados]) => {
-      const itens = dados.novas
-        .map(
-          (pub) => `
-          <div style="margin:12px 0; padding:12px; background:#f4f7f6; border-left:3px solid #16a085; border-radius:4px;">
-            <div style="font-size:12px; color:#666; margin-bottom:4px;">${pub.tipo} &mdash; ${pub.data}</div>
-            <div style="font-weight:600; margin-bottom:4px;">${pub.titulo || '(sem titulo)'}</div>
-            <div style="font-size:12px; color:#555; margin-bottom:6px;">${pub.empresaConfig || ''}${pub.cnpj ? ` &mdash; CNPJ: ${pub.cnpj}` : ''}</div>
-            <div style="font-size:12px; color:#555; margin-bottom:6px;">${pub.orgaoStr || ''}</div>
-            <div style="font-size:13px; color:#333; margin-bottom:8px;">${(pub.resumo || '').slice(0, 300)}${(pub.resumo || '').length > 300 ? '...' : ''}</div>
-            <a href="${pub.link}" style="font-size:12px; color:#16a085;">Ver no diario &rarr;</a>
-          </div>`
-        )
-        .join('');
+      const normais = (dados.novas || []).filter((pub) => {
+        const grav = pub.classificacao && pub.classificacao.gravidade;
+        return grav !== 'critica' && grav !== 'alta';
+      });
+      if (normais.length === 0) return '';
+      const pubs = normais.map(montarLinhaPublicacao).join('');
       return `
-        <div style="margin-bottom:24px;">
-          <h3 style="margin:16px 0 8px; color:#16a085;">${dados.nome || 'Diario estadual'} (${uf})</h3>
-          ${itens}
+        <div style="margin-bottom:20px;">
+          <h3 style="margin:0 0 4px; color:#16a085; font-size:14px;">${dados.nome || 'Diario estadual'} (${uf})</h3>
+          ${pubs}
         </div>`;
     })
     .join('');
 
-  const secaoDOU = t.dou > 0
-    ? `<h2 style="margin:8px 0 16px; color:#2c3e50; font-size:18px;">DOU</h2>${linhasEmpresas}`
-    : '';
+  const rodapeContagem = urgentes.length > 0
+    ? `${totalNovas} publicacoes novas &middot; ${empresasVerificadas} empresas verificadas &middot; proxima varredura: amanha as 8h (dias uteis). Sendo ${urgentes.length} de atencao imediata.`
+    : `${totalNovas} publicacoes novas &middot; ${empresasVerificadas} empresas verificadas &middot; proxima varredura: amanha as 8h (dias uteis).`;
 
-  const secaoIBAMA = t.ibama > 0
-    ? `<h2 style="margin:24px 0 16px; color:#2c3e50; font-size:18px; border-top:1px solid #eee; padding-top:16px;">IBAMA &mdash; Dados Abertos</h2>${blocosIBAMA}`
-    : '';
+  return `<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif; max-width:700px; margin:0 auto; padding:20px; color:#333;">
+  <div style="background:#2c3e50; color:white; padding:18px 20px; border-radius:8px 8px 0 0;">
+    <h2 style="margin:0; font-size:18px;">Monitor de Licencas Ambientais</h2>
+    <div style="font-size:14px; opacity:0.85; margin-top:4px;">${cliente.clienteNome ? `${cliente.clienteNome} &mdash; ` : ''}${dataExec || ''}</div>
+  </div>
+  <div style="background:white; border:1px solid #ddd; border-top:none; padding:20px; border-radius:0 0 8px 8px;">
+    ${secaoAtencao}
+    ${blocosEmpresas}
+    ${blocosDiarios}
+    <div style="font-size:11px; color:#666; margin-top:24px; padding-top:16px; border-top:1px solid #eee;">
+      ${rodapeContagem}
+    </div>
+    <div style="font-size:11px; color:#aaa; margin-top:8px;">
+      Gerado em ${executadoEm || ''}
+    </div>
+  </div>
+</body>
+</html>`;
+}
 
-  const secaoDiarios = t.diarios > 0
-    ? `<h2 style="margin:24px 0 16px; color:#2c3e50; font-size:18px; border-top:1px solid #eee; padding-top:16px;">Diarios Oficiais Estaduais</h2>${blocosDiarios}`
-    : '';
+// Gera o corpo HTML do e-mail. Aceita o bloco per-cliente usado por
+// enviarAlerta ({ data, executadoEm, clienteNome, resultados, ibama, ... })
+// e tambem o relatorio multi-cliente ({ clientes:[...] }) — para que
+// integracoes externas e testes da Fase 5 possam passar qualquer um dos dois.
+function gerarHtml(relatorio) {
+  const r = relatorio || {};
+  const clientes = Array.isArray(r.clientes) && r.clientes.length > 0
+    ? r.clientes
+    : [{
+        clienteId: r.clienteId || null,
+        clienteNome: r.clienteNome || null,
+        resultados: r.resultados || [],
+        ibama: r.ibama || {},
+        diariosEstaduais: r.diariosEstaduais || {},
+      }];
 
-  return `
-    <!DOCTYPE html>
-    <html>
-    <body style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;color:#333;">
-      <div style="background:#2c3e50;color:white;padding:20px;border-radius:8px 8px 0 0;">
-        <h2 style="margin:0;">Monitor de Licencas Ambientais</h2>
-        <div style="font-size:14px;opacity:0.8;margin-top:4px;">${relatorio.clienteNome ? `${relatorio.clienteNome} &mdash; ` : ''}${relatorio.data}</div>
-      </div>
-
-      <div style="background:white;border:1px solid #ddd;border-top:none;padding:24px;border-radius:0 0 8px 8px;">
-        <div style="background:#fef9e7;border:1px solid #f39c12;padding:12px;border-radius:6px;margin-bottom:24px;">
-          <strong style="color:#e67e22;">&#9888; ${t.total} alerta(s) novo(s)</strong>
-          &mdash; ${t.dou} do DOU, ${t.ibama} do IBAMA, ${t.diarios} de diarios estaduais
-        </div>
-
-        ${secaoDOU}
-        ${secaoIBAMA}
-        ${secaoDiarios}
-
-        <div style="font-size:11px;color:#aaa;margin-top:24px;padding-top:16px;border-top:1px solid #eee;">
-          Gerado em ${relatorio.executadoEm} &mdash; Monitor de Licencas Ambientais
-        </div>
-      </div>
-    </body>
-    </html>`;
+  return clientes
+    .map((cliente) => gerarHtmlCliente(cliente, r.data, r.executadoEm))
+    .join('\n');
 }
 
 // Envia o e-mail de alerta para todos os destinatarios configurados.
