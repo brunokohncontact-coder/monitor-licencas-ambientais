@@ -11,6 +11,9 @@ const {
   validarNome,
   validarUF,
   exigirSessao,
+  contarUrgentes,
+  contarEmpresasAtivas,
+  statusSistema,
 } = require('./painel');
 
 // --- Fixtures ---
@@ -167,4 +170,196 @@ test('validarUF aceita UF valida, aceita vazia (opcional) e rejeita invalida', (
   assert.strictEqual(validarUF('XX'), false);
   assert.strictEqual(validarUF('Brasil'), false);
   assert.strictEqual(validarUF(99), false);
+});
+
+// --- contarUrgentes ---
+
+test('contarUrgentes retorna 0 quando nao ha relatorio', () => {
+  assert.strictEqual(contarUrgentes(null), 0);
+  assert.strictEqual(contarUrgentes(undefined), 0);
+  assert.strictEqual(contarUrgentes({}), 0);
+  assert.strictEqual(contarUrgentes({ clientes: null }), 0);
+});
+
+test('contarUrgentes conta criticas e altas em DOU (resultados[].relevantes[])', () => {
+  const rel = {
+    clientes: [
+      {
+        resultados: [
+          {
+            relevantes: [
+              { classificacao: { gravidade: 'critica' } },
+              { classificacao: { gravidade: 'alta' } },
+              { classificacao: { gravidade: 'media' } },
+              { classificacao: { gravidade: 'baixa' } },
+            ],
+          },
+        ],
+        ibama: {},
+      },
+    ],
+  };
+  assert.strictEqual(contarUrgentes(rel), 2);
+});
+
+test('contarUrgentes conta IBAMA autos.novas e embargos.novas pelo length', () => {
+  const rel = {
+    clientes: [
+      {
+        resultados: [],
+        ibama: {
+          autos: { novas: [{ id: 1 }, { id: 2 }] },
+          embargos: { novas: [{ id: 3 }] },
+        },
+      },
+    ],
+  };
+  assert.strictEqual(contarUrgentes(rel), 3);
+});
+
+test('contarUrgentes em relatorio legado (sem classificacao) conta so IBAMA, DOU = 0', () => {
+  const rel = {
+    clientes: [
+      {
+        resultados: [
+          { relevantes: [{ titulo: 'Publicacao sem classificacao' }] },
+        ],
+        ibama: { autos: { novas: [{ id: 1 }] }, embargos: { novas: [] } },
+      },
+    ],
+  };
+  assert.strictEqual(contarUrgentes(rel), 1);
+});
+
+test('contarUrgentes conta DOESP (diariosEstaduais.SP.novas) com classificacao critica/alta', () => {
+  const rel = {
+    clientes: [
+      {
+        resultados: [],
+        ibama: {},
+        diariosEstaduais: {
+          SP: {
+            novas: [
+              { classificacao: { gravidade: 'critica' } },
+              { classificacao: { gravidade: 'alta' } },
+              { classificacao: { gravidade: 'media' } },
+            ],
+          },
+        },
+      },
+    ],
+  };
+  assert.strictEqual(contarUrgentes(rel), 2);
+});
+
+test('contarUrgentes soma todas as fontes em multiplos clientes', () => {
+  const rel = {
+    clientes: [
+      {
+        resultados: [
+          { relevantes: [{ classificacao: { gravidade: 'critica' } }] },
+        ],
+        ibama: { autos: { novas: [{ id: 1 }] }, embargos: { novas: [{ id: 2 }] } },
+        diariosEstaduais: {
+          SP: { novas: [{ classificacao: { gravidade: 'alta' } }] },
+        },
+      },
+      {
+        resultados: [
+          { relevantes: [{ classificacao: { gravidade: 'alta' } }] },
+        ],
+        ibama: {},
+      },
+    ],
+  };
+  assert.strictEqual(contarUrgentes(rel), 5);
+});
+
+// --- contarEmpresasAtivas ---
+
+test('contarEmpresasAtivas retorna 0 para config null/undefined/vazio', () => {
+  assert.strictEqual(contarEmpresasAtivas(null), 0);
+  assert.strictEqual(contarEmpresasAtivas(undefined), 0);
+  assert.strictEqual(contarEmpresasAtivas({}), 0);
+  assert.strictEqual(contarEmpresasAtivas({ clientes: [] }), 0);
+});
+
+test('contarEmpresasAtivas soma empresas ativa:true em clientes ativo:true', () => {
+  const config = {
+    clientes: [
+      {
+        ativo: true,
+        empresas: [
+          { nome: 'A', ativa: true },
+          { nome: 'B', ativa: true },
+        ],
+      },
+      {
+        ativo: true,
+        empresas: [{ nome: 'C', ativa: true }],
+      },
+    ],
+  };
+  assert.strictEqual(contarEmpresasAtivas(config), 3);
+});
+
+test('contarEmpresasAtivas ignora empresas em cliente inativo', () => {
+  const config = {
+    clientes: [
+      {
+        ativo: false,
+        empresas: [
+          { nome: 'A', ativa: true },
+          { nome: 'B', ativa: true },
+        ],
+      },
+      {
+        ativo: true,
+        empresas: [{ nome: 'C', ativa: true }],
+      },
+    ],
+  };
+  assert.strictEqual(contarEmpresasAtivas(config), 1);
+});
+
+test('contarEmpresasAtivas ignora empresa ativa:false em cliente ativo', () => {
+  const config = {
+    clientes: [
+      {
+        ativo: true,
+        empresas: [
+          { nome: 'A', ativa: true },
+          { nome: 'B', ativa: false },
+          { nome: 'C' },
+        ],
+      },
+    ],
+  };
+  assert.strictEqual(contarEmpresasAtivas(config), 1);
+});
+
+// --- statusSistema ---
+
+test('statusSistema preserva campos antigos e adiciona alertasUrgentesHoje e totalEmpresasAtivas', () => {
+  const status = statusSistema();
+  // Campos antigos preservados
+  assert.ok('totalRelatorios' in status);
+  assert.ok('ultimoRelatorio' in status);
+  assert.ok('ultimaExecucao' in status);
+  assert.ok('errosUltimoRelatorio' in status);
+  assert.ok('saudeUltimoRelatorio' in status);
+  assert.ok('varredura' in status);
+  // Campos novos presentes
+  assert.ok('alertasUrgentesHoje' in status);
+  assert.ok('totalEmpresasAtivas' in status);
+});
+
+test('statusSistema retorna alertasUrgentesHoje e totalEmpresasAtivas como inteiros nao-negativos', () => {
+  const status = statusSistema();
+  assert.strictEqual(typeof status.alertasUrgentesHoje, 'number');
+  assert.strictEqual(Number.isInteger(status.alertasUrgentesHoje), true);
+  assert.ok(status.alertasUrgentesHoje >= 0);
+  assert.strictEqual(typeof status.totalEmpresasAtivas, 'number');
+  assert.strictEqual(Number.isInteger(status.totalEmpresasAtivas), true);
+  assert.ok(status.totalEmpresasAtivas >= 0);
 });

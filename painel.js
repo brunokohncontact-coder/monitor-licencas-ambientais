@@ -227,6 +227,44 @@ function listarRelatorios() {
     });
 }
 
+// Conta publicacoes urgentes do ultimo relatorio: criticas/altas em DOU/DOESP + IBAMA novas.
+// Relatorio legado sem classificacao: DOU/DOESP = 0, IBAMA conta pela chave.
+function contarUrgentes(relatorio) {
+  if (!relatorio || !Array.isArray(relatorio.clientes)) return 0;
+  let total = 0;
+  for (const cliente of relatorio.clientes) {
+    for (const r of (cliente.resultados || [])) {
+      for (const pub of (r.relevantes || [])) {
+        const g = pub.classificacao && pub.classificacao.gravidade;
+        if (g === 'critica' || g === 'alta') total++;
+      }
+    }
+    if (cliente.ibama) {
+      total += ((cliente.ibama.autos && cliente.ibama.autos.novas) || []).length;
+      total += ((cliente.ibama.embargos && cliente.ibama.embargos.novas) || []).length;
+    }
+    if (cliente.diariosEstaduais && cliente.diariosEstaduais.SP) {
+      for (const pub of (cliente.diariosEstaduais.SP.novas || [])) {
+        const g = pub.classificacao && pub.classificacao.gravidade;
+        if (g === 'critica' || g === 'alta') total++;
+      }
+    }
+  }
+  return total;
+}
+
+// Soma empresas ativa:true em clientes ativo:true
+function contarEmpresasAtivas(config) {
+  let total = 0;
+  for (const c of (config && config.clientes || [])) {
+    if (c.ativo !== true) continue;
+    for (const e of (c.empresas || [])) {
+      if (e.ativa === true) total++;
+    }
+  }
+  return total;
+}
+
 // Monta o status do sistema: ultimo run, total de relatorios, erros do ultimo
 // relatorio, a saude da ultima execucao e o estado da varredura manual.
 // saudeUltimoRelatorio e null para relatorios legados sem o campo `saude` —
@@ -234,6 +272,24 @@ function listarRelatorios() {
 function statusSistema() {
   const relatorios = listarRelatorios();
   const ultimo = relatorios[0] || null;
+
+  let ultimoConteudo = null;
+  if (ultimo && ultimo.nome) {
+    try {
+      const caminho = path.join(RAIZ, ultimo.nome);
+      ultimoConteudo = normalizarRelatorio(JSON.parse(fs.readFileSync(caminho, 'utf-8')));
+    } catch {
+      // relatorio ilegivel — urgentes = 0
+    }
+  }
+
+  let config = null;
+  try {
+    config = carregarConfig();
+  } catch {
+    // config ilegivel — empresas = 0
+  }
+
   return {
     totalRelatorios: relatorios.length,
     ultimoRelatorio: ultimo ? ultimo.nome : null,
@@ -241,6 +297,8 @@ function statusSistema() {
     errosUltimoRelatorio: ultimo && typeof ultimo.erros === 'number' ? ultimo.erros : 0,
     saudeUltimoRelatorio: ultimo ? ultimo.saude || null : null,
     varredura: estadoVarredura,
+    alertasUrgentesHoje: contarUrgentes(ultimoConteudo),
+    totalEmpresasAtivas: contarEmpresasAtivas(config),
   };
 }
 
@@ -685,6 +743,8 @@ module.exports = {
   validarUF,
   contarErrosRelatorio,
   saudeDoRelatorio,
+  contarUrgentes,
+  contarEmpresasAtivas,
   exigirSessao,
   listarRelatorios,
   statusSistema,
