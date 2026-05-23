@@ -443,16 +443,22 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
     return null;
   }
 
+  if (!Array.isArray(config.clientes)) {
+    throw new Error('Configuracao invalida: clientes[] nao encontrado.');
+  }
+
   const clientesAtivos = config.clientes.filter((c) => c.ativo);
 
   console.log(`\nIniciando monitoramento para ${hoje}...`);
   console.log(`Clientes ativos: ${clientesAtivos.length}`);
   console.log(`Log desta execucao: ${arquivoLog}`);
 
-  const browser = await chromium.launch({ headless: true });
-  const db = inicializarDB();
+  let browser;
+  let db;
 
   try {
+    browser = await chromium.launch({ headless: true });
+    db = inicializarDB();
     const relatorio = {
       data: hoje,
       executadoEm: new Date().toISOString(),
@@ -628,8 +634,16 @@ async function executarMonitorInterno(opcoes, arquivoLog) {
 
     return relatorio;
   } finally {
-    await browser.close();
-    db.close();
+    try {
+      if (browser) await browser.close();
+    } catch (err) {
+      logger.error('Erro ao fechar browser:', err);
+    }
+    try {
+      if (db) db.close();
+    } catch (err) {
+      logger.error('Erro ao fechar database:', err);
+    }
   }
 }
 

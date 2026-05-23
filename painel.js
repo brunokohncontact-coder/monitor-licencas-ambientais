@@ -420,8 +420,16 @@ function criarApp(opcoes = {}) {
 
   app.post('/login', (req, res) => {
     const informada = req.body && typeof req.body.senha === 'string' ? req.body.senha : '';
-    // Comparacao server-side: a senha configurada nunca sai do servidor.
-    if (senha && informada === senha) {
+    // Comparacao constante em tempo: evita timing attacks.
+    let autenticado = false;
+    if (senha && informada.length === senha.length) {
+      try {
+        autenticado = crypto.timingSafeEqual(Buffer.from(informada), Buffer.from(senha));
+      } catch {
+        autenticado = false;
+      }
+    }
+    if (autenticado) {
       req.session.autenticado = true;
       return res.redirect('/');
     }
@@ -714,8 +722,15 @@ function iniciar(opcoes = {}) {
     }
     local.painel = local.painel || {};
     local.painel.sessionSecret = sessionSecret;
-    fs.writeFileSync(localPath, JSON.stringify(local, null, 2) + '\n');
-    console.log('Session secret gerado e salvo em config.local.json');
+    try {
+      fs.writeFileSync(localPath, JSON.stringify(local, null, 2) + '\n');
+      console.log('Session secret gerado e salvo em config.local.json');
+    } catch (err) {
+      throw new Error(
+        `Nao foi possivel salvar session secret em config.local.json: ${err.message}. ` +
+        'Verifique permissoes de arquivo e espaco em disco.'
+      );
+    }
   }
 
   const porta = painel.porta || 3000;
