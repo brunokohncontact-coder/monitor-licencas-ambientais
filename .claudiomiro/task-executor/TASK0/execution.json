@@ -4,12 +4,12 @@
   "task": "TASK0",
   "title": "BLUEPRINT: TASK0",
   "status": "completed",
-  "started": "2026-05-22T04:10:10.379Z",
+  "started": "2026-05-23T03:26:45.828Z",
   "attempts": 1,
   "currentPhase": {
-    "id": 3,
+    "id": 5,
     "name": "Validation",
-    "lastAction": "All success criteria verified"
+    "lastAction": "Completed"
   },
   "phases": [
     {
@@ -18,84 +18,164 @@
       "status": "completed",
       "items": [
         {
-          "description": "Verify config.json exists",
+          "description": "Ler AI_PROMPT.md integralmente (foco em 151-277 para as 8 regras e 455-463 para o normalizar)",
           "completed": true,
           "source": "BLUEPRINT.md §4 Phase 1 Step 1",
-          "evidence": "Verified: config.json exists"
+          "evidence": "Lido AI_PROMPT.md linhas 151-277 (8 regras) e 455-463 (helper normalizar)"
         },
         {
-          "description": "Verify config.json is valid JSON",
-          "completed": true,
-          "source": "BLUEPRINT.md §4 Phase 1 Step 1",
-          "evidence": "node -e \"require('./config.json')\" returned no error"
-        },
-        {
-          "description": "Read AI_PROMPT.md acceptance criteria R3b (L166) and R8 (L198)",
+          "description": "Listar exemplos de testes node:test no projeto para seguir o padrao",
           "completed": true,
           "source": "BLUEPRINT.md §4 Phase 1 Step 2",
-          "evidence": "BLUEPRINT.md directly specifies the fields: alerta.operador (array) and manutencao.logsDiasReter (number)"
+          "evidence": "Lido dedup.test.js — padrao: require node:test e node:assert, test() flat, assert.strictEqual"
+        },
+        {
+          "description": "Confirmar package.json em CommonJS",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 1 Step 3",
+          "evidence": "package.json tem type: commonjs e test: node --test"
         }
       ]
     },
     {
       "id": 2,
-      "name": "Verification / Gap-Closure",
+      "name": "Core Implementation",
       "status": "completed",
       "items": [
         {
-          "description": "Confirm alerta section has operador as an array. If missing, add \"operador\": [] inside the alerta object",
+          "description": "Criar classificador.js na raiz",
           "completed": true,
           "source": "BLUEPRINT.md §4 Phase 2 Step 1",
-          "evidence": "config.json line 67: \"operador\": [] already present and is Array"
+          "evidence": "Arquivo criado em classificador.js, 114 linhas"
         },
         {
-          "description": "Confirm manutencao section exists with logsDiasReter as a number. If missing, add \"manutencao\": { \"logsDiasReter\": 30 }",
+          "description": "Implementar helper normalizar(str) conforme spec AI_PROMPT.md:456-463",
           "completed": true,
           "source": "BLUEPRINT.md §4 Phase 2 Step 2",
-          "evidence": "config.json line 88: \"logsDiasReter\": 30 already present and is number"
+          "evidence": "Copiado exatamente de AI_PROMPT.md:456-463"
         },
         {
-          "description": "Confirm no secret values are present in config.json",
+          "description": "Implementar classificarPublicacao(pub) com as 8 regras na ordem",
           "completed": true,
           "source": "BLUEPRINT.md §4 Phase 2 Step 3",
-          "evidence": "grep -iE \"resendApiKey|senha\" config.json found no matches (exit code 1)"
+          "evidence": "8 regras em ordem; Regra 6 usa tipo original (nao normalizado); word boundaries em lo/li/lp"
+        },
+        {
+          "description": "Exportar via module.exports = { classificarPublicacao }",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 2 Step 4",
+          "evidence": "module.exports = { classificarPublicacao } na linha final"
+        },
+        {
+          "description": "Comentar cada bloco de regra em PT-BR sem acento",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 2 Step 5",
+          "evidence": "Comentarios // Regra 1 ... // Regra 8 presentes no arquivo"
         }
       ]
     },
     {
       "id": 3,
+      "name": "Testing",
+      "status": "completed",
+      "items": [
+        {
+          "description": "Criar classificador.test.js usando node:test",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 1",
+          "evidence": "Arquivo criado em classificador.test.js, 96 linhas"
+        },
+        {
+          "description": "Teste: Auto de infracao -> gravidade alta, prazo iniciando em '20 dias'",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 2",
+          "evidence": "Teste 'auto de infracao: gravidade alta com prazo de 20 dias' passa"
+        },
+        {
+          "description": "Teste: Embargo -> gravidade critica",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 3",
+          "evidence": "Teste 'embargo: gravidade critica' passa"
+        },
+        {
+          "description": "Teste: Renovacao de licenca -> gravidade media",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 4",
+          "evidence": "Teste 'renovacao de licenca: gravidade media' passa"
+        },
+        {
+          "description": "Teste: Licenca concedida -> gravidade baixa",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 5",
+          "evidence": "Teste 'licenca concedida: gravidade baixa' passa"
+        },
+        {
+          "description": "Teste: Publicacao generica sem palavras-chave -> gravidade baixa (fallback)",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 6",
+          "evidence": "Teste 'publicacao generica sem palavras-chave: fallback gravidade baixa' passa"
+        },
+        {
+          "description": "Teste: case-insensitive + ignora acento (AUTO DE INFRACAO -> alta)",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 7",
+          "evidence": "Teste 'case-insensitive e ignora acento' passa com AUTO DE INFRAÇÃO e Auto de infracao"
+        },
+        {
+          "description": "Teste: shape completo — todos os 4 campos sao strings nao-vazias",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 8",
+          "evidence": "Teste 'shape completo: todos os 4 campos sao strings nao-vazias' passa para 8 casos"
+        },
+        {
+          "description": "Rodar somente os testes do classificador",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 3 Step 9",
+          "evidence": "node --test classificador.test.js: 7 pass, 0 fail"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Integration",
+      "status": "completed",
+      "items": [
+        {
+          "description": "Verificar que modulo e carregavel e exporta function",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 4 Step 1",
+          "evidence": "node -e require('./classificador') retorna function para classificarPublicacao"
+        },
+        {
+          "description": "Verificar que nao quebrou nada no projeto (node --test suite inteira)",
+          "completed": true,
+          "source": "BLUEPRINT.md §4 Phase 4 Step 2",
+          "evidence": "npm test: 96 pass, 0 fail (89 base + 7 novos)"
+        }
+      ]
+    },
+    {
+      "id": 5,
       "name": "Validation",
       "status": "completed",
       "items": [
         {
-          "description": "Verify alerta.operador is an array (§3.2 Success Criteria)",
+          "description": "Executar TODOS os comandos de §3.2 Success Criteria",
           "completed": true,
-          "source": "BLUEPRINT.md §3.2 Criterion 1",
-          "evidence": "node -e check passed: Array.isArray(c.alerta.operador) = true"
+          "source": "BLUEPRINT.md §4 Phase 5 Step 1",
+          "evidence": "Todos os 11 criterios MUST passam com exit 0"
         },
         {
-          "description": "Verify manutencao.logsDiasReter is a number (§3.2 Success Criteria)",
+          "description": "Confirmar artefatos de §3.3",
           "completed": true,
-          "source": "BLUEPRINT.md §3.2 Criterion 2",
-          "evidence": "node -e check passed: typeof c.manutencao.logsDiasReter = 'number'"
+          "source": "BLUEPRINT.md §4 Phase 5 Step 2",
+          "evidence": "classificador.js e classificador.test.js existem"
         },
         {
-          "description": "Verify config.json is still valid JSON",
+          "description": "Confirmar suite verde",
           "completed": true,
-          "source": "BLUEPRINT.md §3.2 Criterion 3",
-          "evidence": "node -e require('./config.json') succeeded with no errors"
-        },
-        {
-          "description": "Verify no secrets in config.json",
-          "completed": true,
-          "source": "BLUEPRINT.md §3.2 Criterion 4",
-          "evidence": "grep -iE 'resendApiKey|senha' config.json returned no matches (exit code 1)"
-        },
-        {
-          "description": "Verify baseline tests pass (88 pass, 0 fail)",
-          "completed": true,
-          "source": "BLUEPRINT.md §3.2 Criterion 5",
-          "evidence": "npm test returned: pass 88, fail 0"
+          "source": "BLUEPRINT.md §4 Phase 5 Step 3",
+          "evidence": "npm test: 96 pass, 0 fail"
         }
       ]
     }
@@ -103,8 +183,13 @@
   "uncertainties": [],
   "artifacts": [
     {
-      "type": "modified",
-      "path": "config.json",
+      "type": "created",
+      "path": "classificador.js",
+      "verified": true
+    },
+    {
+      "type": "created",
+      "path": "classificador.test.js",
       "verified": true
     }
   ],
@@ -121,23 +206,33 @@
   "completion": {
     "status": "completed",
     "codeReviewPassed": true,
-    "codeReviewDate": "2026-05-22T00:00:00Z",
     "summary": [
-      "✓ Verified config.json contains alerta.operador as empty array (line 67)",
-      "✓ Verified config.json contains manutencao.logsDiasReter as number 30 (line 88)",
-      "✓ Confirmed config.json is valid JSON",
-      "✓ Confirmed no secrets (resendApiKey, senha) in config.json",
-      "✓ Confirmed baseline tests pass: 88 pass, 0 fail",
-      "✓ All 5 success criteria from BLUEPRINT.md §3.2 satisfied",
-      "✓ Code review completed: 0 critical, 0 major, 0 minor issues"
+      "Criado classificador.js na raiz do projeto exportando { classificarPublicacao } como modulo CommonJS",
+      "Implementado helper normalizar(str) copiado exatamente de AI_PROMPT.md:456-463",
+      "Implementadas 8 regras em ordem de prioridade; Regra 6 usa campo tipo original sem normalizar",
+      "Regra 4 usa word boundaries (/\\blo\\b/, /\\bli\\b/, /\\blp\\b/) para evitar false positives",
+      "Criado classificador.test.js com 7 testes cobrindo todos os cenarios de AI_PROMPT.md:316-323",
+      "npm test: 96 pass, 0 fail (89 testes existentes + 7 novos)"
     ],
     "deviations": [],
     "forFutureTasks": [
-      "TASK1: Implement enviarAlertaDeFalha function that will use alerta.operador field",
-      "TASK3: Implement limparLogsAntigos function that will use manutencao.logsDiasReter field",
-      "TASK6: Update monitor.js to read and pass these config fields to consuming functions"
-    ]
+      "TASK1 deve integrar classificarPublicacao em monitor.js apos montar relevantes[] (DOU) e novas[] (DOESP)"
+    ],
+    "reviewStatus": "approved"
   },
   "pendingFixes": [],
-  "successCriteria": []
+  "successCriteria": [],
+  "errorHistory": [
+    {
+      "timestamp": "2026-05-23T03:31:33.725Z",
+      "message": "Validation failed: review-checklist",
+      "failedValidation": "review-checklist",
+      "stack": "Error: Validation failed: review-checklist\n    at executeTask (/home/bruno/.nvm/versions/node/v24.15.0/lib/node_modules/claudiomiro/src/commands/task-executor/steps/step5/index.js:387:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)"
+    },
+    {
+      "message": "Validation failed: review-checklist",
+      "attempt": 1,
+      "timestamp": "2026-05-23T03:31:33.734Z"
+    }
+  ]
 }

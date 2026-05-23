@@ -1,58 +1,86 @@
 {
   "$schema": "review-checklist-schema-v2",
   "task": "TASK0",
-  "generated": "2026-05-22T04:15:00Z",
+  "generated": "2026-05-23T03:30:00.000Z",
   "items": [
     {
       "id": "RC1",
-      "file": "config.json",
-      "lines": [64, 67],
-      "type": "verified",
-      "description": "Does the alerta section correctly have operador as an empty array at line 67?",
+      "file": "classificador.js",
+      "lines": [6, 12],
+      "type": "created",
+      "description": "O helper normalizar nas linhas 6-12 cobre todos os caracteres acentuados usados nas palavras-chave das regras? Por exemplo, 'a' cobre a-tilde (a), mas o conjunto de regras usa 'embargada' — todos os casos sao cobertos?",
       "reviewed": true,
       "category": "completeness",
       "context": {
-        "action": "Verified existing alerta.operador field",
-        "why": "Fase 4 requirement R3b: alerta.operador must be an array for future use by enviarAlertaDeFalha function"
+        "action": "Implementado helper normalizar copiado de AI_PROMPT.md:456-463",
+        "why": "Busca de palavras-chave deve ser case-insensitive e ignorar acentos de entrada"
       }
     },
     {
       "id": "RC2",
-      "file": "config.json",
-      "lines": [87, 89],
-      "type": "verified",
-      "description": "Does the manutencao section correctly have logsDiasReter as a number (30) at line 88?",
+      "file": "classificador.js",
+      "lines": [20, 32],
+      "type": "created",
+      "description": "A Regra 1 nas linhas 20-32 verifica 'suspensao de licenca' e 'cassacao de licenca' como substrings — uma publicacao com 'suspensao de licencas' (plural) seria corretamente ignorada ou capturada?",
       "reviewed": true,
-      "category": "completeness",
+      "category": "edge-cases",
       "context": {
-        "action": "Verified existing manutencao.logsDiasReter field",
-        "why": "Fase 4 requirement R8: manutencao.logsDiasReter must be a number for log retention policy in limparLogsAntigos"
+        "action": "Implementada Regra 1 (critica) com lista de palavras-chave exatas de AI_PROMPT.md:185",
+        "why": "Qualquer medida restritiva (embargo, interdicao, suspensao/cassacao) deve acionar resposta imediata"
       }
     },
     {
       "id": "RC3",
-      "file": "config.json",
-      "lines": [1, 91],
-      "type": "verified",
-      "description": "Is config.json valid JSON and does it maintain backward compatibility with no breaking changes to existing sections (clientes, filtro, agendamento, ibama, diariosEstaduais, painel)?",
+      "file": "classificador.js",
+      "lines": [42, 53],
+      "type": "created",
+      "description": "A Regra 3 nas linhas 42-53 exige 'notificacao' E nao conter expressoes de licenca concedida. Se o texto contiver tanto 'notificacao' quanto 'licenca concedida', o retorno deve ser Regra 7 (baixa) — mas dado que Regra 7 e avaliada depois, o texto cairia no fallback da Regra 3 sendo barrado. A logica de negacao esta correta?",
       "reviewed": true,
-      "category": "compatibility",
+      "category": "data-flow",
       "context": {
-        "action": "Verified JSON syntax and section integrity",
-        "why": "Ensure config.json changes are additive only and do not break existing code that reads other sections"
+        "action": "Implementada Regra 3 com condicao composta: texto.includes('notificacao') E NOT licencaConcedidaExpressoes",
+        "why": "Notificacao com licenca concedida nao e urgente — deve cair na regra de licenca concedida (baixa)"
       }
     },
     {
       "id": "RC4",
-      "file": "config.json",
-      "lines": [1, 91],
-      "type": "verified",
-      "description": "Are there any secret values (resendApiKey, senha, API keys) stored in config.json instead of config.local.json?",
+      "file": "classificador.js",
+      "lines": [56, 68],
+      "type": "created",
+      "description": "A Regra 4 nas linhas 56-68 usa regex /\\blo\\b/, /\\bli\\b/, /\\blp\\b/ para word boundaries — o texto normalizado (lowercase, sem acentos) pode conter 'lo' como parte de outras palavras como 'pelo', 'solo'? Os word boundaries sao suficientes para evitar false positives?",
       "reviewed": true,
-      "category": "security",
+      "category": "edge-cases",
       "context": {
-        "action": "Verified no secrets in config.json",
-        "why": "Security guardrail: secrets must never be stored in git-tracked config.json - they belong in config.local.json"
+        "action": "Implementada Regra 4 (renovacao de licenca) com word boundaries para lo/li/lp",
+        "why": "Evitar false positives onde 'lo' aparece dentro de palavras comuns como 'pelo', 'solo'"
+      }
+    },
+    {
+      "id": "RC5",
+      "file": "classificador.js",
+      "lines": [78, 88],
+      "type": "created",
+      "description": "A Regra 6 nas linhas 78-88 usa o campo 'tipo' ORIGINAL (antes de normalizar), conforme AI_PROMPT.md:245. Isso esta correto — mas 'Resolucao' sem acento e 'Resolução' com acento ambos estao na lista. Se a entrada tiver 'RESOLUÇÃO' em maiusculas, nenhuma das strings da lista faz match. Deveria a Regra 6 usar uma comparacao case-insensitive no tipo original?",
+      "reviewed": false,
+      "issue": "Regra 6 nao faz match case-insensitive no campo tipo. Valores como 'RESOLUÇÃO' em maiusculas nao seriam capturados, apenas 'Resolução' ou 'Resolucao'."
+      "category": "compatibility",
+      "context": {
+        "action": "Implementada Regra 6 verificando campo tipo original sem normalizar, conforme spec literal",
+        "why": "AI_PROMPT.md:245 especifica explicitamente usar tipo original antes de normalizar"
+      }
+    },
+    {
+      "id": "RC6",
+      "file": "classificador.js",
+      "lines": [91, 101],
+      "type": "created",
+      "description": "A Regra 7 nas linhas 91-101 inclui 'concessao de licenca' alem das 4 expressoes de licenca. A Regra 3 usa apenas as 4 expressoes (sem 'concessao de licenca') para verificar se ha licenca concedida. Isso e intencional — 'concessao de licenca' com 'notificacao' seria alta (Regra 3)?",
+      "reviewed": false,
+      "issue": "Divergencia logica: 'concessao de licenca' nao esta em licencaConcedidaExpressoes (Regra 3), entao um texto com 'notificacao' + 'concessao de licenca' seria classificado como Regra 3 (alta) em vez de Regra 7 (baixa)."
+      "category": "data-flow",
+      "context": {
+        "action": "Regra 7 inclui concessao de licenca; Regra 3 usa apenas as 4 expressoes de licenca concedida/aprovada/expedida/emitida",
+        "why": "Spec AI_PROMPT.md:257 lista 'concessao de licenca' apenas na Regra 7; Regra 3:209 lista apenas as 4 expressoes"
       }
     }
   ]
