@@ -186,3 +186,243 @@ test('enviarAlerta nao envia quando faltam destinatarios (alerta nao configurado
   assert.strictEqual(ok, false);
   assert.strictEqual(enviados.length, 0);
 });
+
+// --- gerarHtml: novo template Fase 5 -------------------------------------
+
+test('gerarHtml inclui a secao Atencao Imediata quando ha publicacao critica/alta', () => {
+  const bloco = {
+    data: '15-05-2026',
+    executadoEm: '2026-05-15T11:00:00.000Z',
+    clienteNome: 'Cliente Urgente',
+    resultados: [
+      {
+        empresa: 'Empresa Gamma',
+        cnpj: '33.333.333/0001-33',
+        totalEncontradas: 1,
+        relevantes: [
+          {
+            tipo: 'Auto de Infracao',
+            titulo: 'Autuacao por desmatamento',
+            resumo: 'Auto de infracao ambiental.',
+            link: 'https://www.in.gov.br/exemplo-gamma',
+            classificacao: {
+              gravidade: 'alta',
+              prazo: '20 dias corridos para apresentar defesa administrativa',
+              acao: 'Apresentar defesa administrativa',
+              explicacao: 'Auto de infracao emitido pelo orgao ambiental.',
+            },
+          },
+        ],
+        jaAlertadas: [],
+        todas: [],
+      },
+    ],
+    ibama: {},
+  };
+  const html = gerarHtml(bloco);
+  assert.match(html, /Atencao Imediata/);
+  assert.match(html, /Autuacao por desmatamento/);
+  assert.match(html, /20 dias corridos/);
+  assert.match(html, /Apresentar defesa administrativa/);
+});
+
+test('gerarHtml inclui Atencao Imediata e marca gravidade critica para IBAMA embargos.novas', () => {
+  const bloco = {
+    data: '15-05-2026',
+    executadoEm: '2026-05-15T11:00:00.000Z',
+    clienteNome: 'Cliente Embargo',
+    resultados: [],
+    ibama: {
+      embargos: {
+        novas: [
+          {
+            titulo: 'Embargo de operacao - area X',
+            nome: 'EMPRESA EMBARGADA LTDA',
+            empresaConfig: 'Empresa Embargada',
+            cnpj: '44.444.444/0001-44',
+            municipio: 'Belem',
+            uf: 'PA',
+            processo: '02001.000999/2026-99',
+            valor: '0,00',
+            resumo: 'Embargo administrativo de area irregular.',
+          },
+        ],
+        jaAlertadas: [],
+        totalEncontradas: 1,
+      },
+    },
+  };
+  const html = gerarHtml(bloco);
+  assert.match(html, /Atencao Imediata/);
+  assert.match(html, /Embargo de operacao - area X/);
+  // Critica usa o background #fee2e2 (cor exata da spec)
+  assert.match(html, /#fee2e2/);
+  assert.match(html, /CRITICA/);
+});
+
+test('gerarHtml NAO inclui Atencao Imediata quando nao ha urgentes', () => {
+  const bloco = {
+    data: '15-05-2026',
+    executadoEm: '2026-05-15T11:00:00.000Z',
+    clienteNome: 'Cliente Tranquilo',
+    resultados: [
+      {
+        empresa: 'Empresa Calma',
+        cnpj: '55.555.555/0001-55',
+        totalEncontradas: 1,
+        relevantes: [
+          {
+            tipo: 'Aviso',
+            titulo: 'Aviso institucional',
+            resumo: 'Comunicado geral.',
+            link: 'https://www.in.gov.br/calma',
+            classificacao: {
+              gravidade: 'baixa',
+              prazo: 'Sem prazo definido',
+              acao: 'Apenas registrar',
+              explicacao: 'Publicacao informativa sem impacto operacional.',
+            },
+          },
+        ],
+        jaAlertadas: [],
+        todas: [],
+      },
+    ],
+    ibama: {},
+  };
+  const html = gerarHtml(bloco);
+  assert.ok(!html.includes('Atencao Imediata'),
+    'sem urgentes, a secao Atencao Imediata deve ser omitida');
+  assert.match(html, /Empresa Calma/);
+  assert.match(html, /BAIXA/);
+});
+
+test('gerarHtml mostra IBAMA autos com gravidade ALTA (inferida pela chave)', () => {
+  const bloco = {
+    data: '15-05-2026',
+    executadoEm: '2026-05-15T11:00:00.000Z',
+    clienteNome: 'Cliente Auto',
+    resultados: [],
+    ibama: {
+      autos: {
+        novas: [
+          {
+            titulo: 'Auto de Infracao IBAMA 9999',
+            nome: 'AUTUADA SA',
+            empresaConfig: 'Autuada',
+            cnpj: '66.666.666/0001-66',
+            municipio: 'Manaus',
+            uf: 'AM',
+            processo: '02001.000777/2026-77',
+            valor: '100.000,00',
+            resumo: 'Auto de infracao por crime ambiental.',
+          },
+        ],
+        jaAlertadas: [],
+        totalEncontradas: 1,
+      },
+    },
+  };
+  const html = gerarHtml(bloco);
+  assert.match(html, /Auto de Infracao IBAMA 9999/);
+  assert.match(html, /ALTA/);
+  // Cor exata para alta
+  assert.match(html, /#ffedd5/);
+});
+
+test('gerarHtml e retrocompativel com publicacao sem classificacao', () => {
+  const bloco = {
+    data: '15-05-2026',
+    executadoEm: '2026-05-15T11:00:00.000Z',
+    clienteNome: 'Cliente Legado',
+    resultados: [
+      {
+        empresa: 'Empresa Antiga',
+        cnpj: '77.777.777/0001-77',
+        totalEncontradas: 1,
+        relevantes: [
+          {
+            tipo: 'Aviso',
+            titulo: 'Publicacao legada sem classificacao',
+            resumo: 'Item de relatorio antigo.',
+            link: 'https://www.in.gov.br/legado',
+            // sem classificacao
+          },
+        ],
+        jaAlertadas: [],
+        todas: [],
+      },
+    ],
+    ibama: {},
+  };
+  let html;
+  assert.doesNotThrow(() => {
+    html = gerarHtml(bloco);
+  }, 'gerarHtml nao deve lancar para publicacao sem classificacao');
+  assert.match(html, /Publicacao legada sem classificacao/);
+  assert.match(html, /Empresa Antiga/);
+});
+
+test('gerarHtml inclui rodape com contagem e proxima varredura', () => {
+  const bloco = {
+    data: '15-05-2026',
+    executadoEm: '2026-05-15T11:00:00.000Z',
+    clienteNome: 'Cliente Rodape',
+    resultados: [
+      {
+        empresa: 'Empresa Rodape',
+        cnpj: '88.888.888/0001-88',
+        totalEncontradas: 1,
+        relevantes: [
+          {
+            tipo: 'Aviso',
+            titulo: 'Item de rodape',
+            resumo: 'Conteudo.',
+            link: 'https://www.in.gov.br/rodape',
+            classificacao: {
+              gravidade: 'media',
+              prazo: 'Sem prazo formal',
+              acao: 'Avaliar impacto',
+              explicacao: 'Item informativo.',
+            },
+          },
+        ],
+        jaAlertadas: [],
+        todas: [],
+      },
+    ],
+    ibama: {},
+  };
+  const html = gerarHtml(bloco);
+  assert.match(html, /publicacoes novas/);
+  assert.match(html, /empresas verificadas/);
+  assert.match(html, /proxima varredura/);
+});
+
+test('gerarHtml aceita relatorio multi-cliente (shape {clientes:[]})', () => {
+  const html = gerarHtml({
+    data: '15-05-2026',
+    executadoEm: '2026-05-15T11:00:00.000Z',
+    clientes: [
+      {
+        clienteId: 'cliente-a',
+        clienteNome: 'Cliente A',
+        resultados: [
+          {
+            empresa: 'Empresa Alfa',
+            cnpj: '11.111.111/0001-11',
+            totalEncontradas: 0,
+            relevantes: [],
+            jaAlertadas: [],
+            todas: [],
+          },
+        ],
+        ibama: { autos: { novas: [], jaAlertadas: [], totalEncontradas: 0 } },
+        diariosEstaduais: {},
+      },
+    ],
+  });
+  assert.strictEqual(typeof html, 'string');
+  assert.match(html, /Cliente A/);
+  assert.match(html, /Empresa Alfa/);
+});
