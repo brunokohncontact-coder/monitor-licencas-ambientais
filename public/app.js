@@ -102,6 +102,17 @@ function renderizarSaude(status) {
 }
 
 function renderizarStatus(status) {
+  // FASE 5: popula os 3 cards de KPI no topo
+  var urg = (status && Number(status.alertasUrgentesHoje)) || 0;
+  var valorUrgentes = document.getElementById('kpiUrgentesValor');
+  var cardUrgentes = document.getElementById('kpiUrgentes');
+  if (valorUrgentes) valorUrgentes.textContent = String(urg);
+  if (cardUrgentes) cardUrgentes.classList.toggle('kpi-urgente', urg > 0);
+  var valorEmp = document.getElementById('kpiEmpresasValor');
+  if (valorEmp) valorEmp.textContent = String((status && status.totalEmpresasAtivas) || 0);
+  var valorExec = document.getElementById('kpiExecucaoValor');
+  if (valorExec) valorExec.textContent = (status && status.ultimaExecucao) || '—';
+
   const el = document.getElementById('status');
   if (!status) { el.innerHTML = ''; return; }
 
@@ -179,6 +190,16 @@ function renderizarRelatorio(rel) {
     clientes.map(renderizarClienteRelatorio).join('');
 }
 
+// FASE 5: ordena publicacoes por gravidade (critica primeiro)
+function ordenarPorGravidade(lista) {
+  var peso = { critica: 0, alta: 1, media: 2, baixa: 3 };
+  return (lista || []).slice().sort(function (a, b) {
+    var pa = a && a.classificacao && peso[a.classificacao.gravidade];
+    var pb = b && b.classificacao && peso[b.classificacao.gravidade];
+    return (pa === undefined ? 4 : pa) - (pb === undefined ? 4 : pb);
+  });
+}
+
 function renderizarClienteRelatorio(c) {
   const resultados = Array.isArray(c.resultados) ? c.resultados : [];
   const empresasHtml = resultados.length > 0
@@ -201,8 +222,8 @@ function renderizarResultadoEmpresa(res) {
   const nome = typeof res.empresa === 'string' ? res.empresa : (res.empresa && res.empresa.nome) || '?';
   const cnpj = res.cnpj || (res.empresa && res.empresa.cnpj) || '';
   const total = typeof res.totalEncontradas === 'number' ? res.totalEncontradas : 0;
-  const relevantes = Array.isArray(res.relevantes) ? res.relevantes : [];
-  const jaAlertadas = Array.isArray(res.jaAlertadas) ? res.jaAlertadas : [];
+  const relevantes = ordenarPorGravidade(Array.isArray(res.relevantes) ? res.relevantes : []);
+  const jaAlertadas = ordenarPorGravidade(Array.isArray(res.jaAlertadas) ? res.jaAlertadas : []);
 
   let pubsHtml;
   if (res.erro) {
@@ -237,10 +258,30 @@ function renderizarPublicacao(pub) {
     ? ' <a href="' + esc(pub.link) + '" target="_blank" rel="noopener">Abrir</a>'
     : '';
 
+  // FASE 5: badge de gravidade + prazo italico + acao negrito
+  const c = pub && pub.classificacao;
+  var badgeHtml = '';
+  var prazoHtml = '';
+  var acaoHtml = '';
+  if (c && c.gravidade) {
+    var gravLabel = {
+      critica: 'CRITICA',
+      alta: 'ALTA',
+      media: 'MEDIA',
+      baixa: 'BAIXA'
+    };
+    var label = gravLabel[c.gravidade] || '';
+    if (label) badgeHtml = '<span class="badge-' + c.gravidade + '">' + label + '</span> ';
+    if (c.prazo) prazoHtml = '<div class="pub-prazo"><em>' + esc(c.prazo) + '</em></div>';
+    if (c.acao) acaoHtml = '<div class="pub-acao"><strong>' + esc(c.acao) + '</strong></div>';
+  }
+
   return '<div class="pub-item">' +
-    '<div class="pub-titulo">' + tipo + esc(pub.titulo || '—') + icmbio + link + '</div>' +
+    '<div class="pub-titulo">' + badgeHtml + tipo + esc(pub.titulo || '—') + icmbio + link + '</div>' +
     '<div class="pub-meta">' + orgao + (pub.data ? ' · ' + esc(pub.data) : '') + '</div>' +
     (pub.resumo ? '<div class="pub-resumo">' + esc(pub.resumo) + '</div>' : '') +
+    prazoHtml +
+    acaoHtml +
     '</div>';
 }
 
